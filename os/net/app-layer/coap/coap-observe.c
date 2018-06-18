@@ -50,7 +50,7 @@
 
 /* Log configuration */
 #include "coap-log.h"
-#define LOG_MODULE "coap-observe"
+#define LOG_MODULE "coap"
 #define LOG_LEVEL  LOG_LEVEL_COAP
 
 /*---------------------------------------------------------------------------*/
@@ -351,6 +351,20 @@ coap_observe_handler(coap_resource_t *resource, coap_message_t *coap_req,
       }
     }
   }
+}
+/*---------------------------------------------------------------------------*/
+uint8_t
+coap_has_observers(char *path)
+{
+  coap_observer_t *obs = NULL;
+
+  for(obs = (coap_observer_t *)list_head(observers_list); obs;
+      obs = obs->next) {
+    if((strncmp(obs->url, path, strlen(path))) == 0) {
+      return 1;
+    }
+  }
+  return 0;
 }
 /*---------------------------------------------------------------------------*/
 /** @} */
