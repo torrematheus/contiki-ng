@@ -579,8 +579,10 @@ tun_alloc(char *dev, int tap)
    *        IFF_NO_PI - Do not provide packet information
    */
   ifr.ifr_flags = (tap ? IFF_TAP : IFF_TUN) | IFF_NO_PI;
-  if(*dev != 0)
-    strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+  if(*dev != 0) {
+    strncpy(ifr.ifr_name, dev, sizeof(ifr.ifr_name) - 1);
+    ifr.ifr_name[sizeof(ifr.ifr_name) - 1] = '\0';
+  }
 
   if((err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0 ) {
     close(fd);
@@ -793,9 +795,9 @@ main(int argc, char **argv)
 
     case 's':
       if(strncmp("/dev/", optarg, 5) == 0) {
-	siodev = optarg + 5;
+        siodev = optarg + 5;
       } else {
-	siodev = optarg;
+        siodev = optarg;
       }
       break;
 
@@ -806,10 +808,11 @@ main(int argc, char **argv)
 
     case 't':
       if(strncmp("/dev/", optarg, 5) == 0) {
-	strncpy(tundev, optarg + 5, sizeof(tundev));
+        strncpy(tundev, optarg + 5, sizeof(tundev) - 1);
       } else {
-	strncpy(tundev, optarg, sizeof(tundev));
+        strncpy(tundev, optarg, sizeof(tundev) - 1);
       }
+      tundev[sizeof(tundev) - 1] = '\0';
       break;
 
     case 'a':
@@ -884,6 +887,17 @@ exit(1);
       err(1, "unknown baudrate %d", baudrate);
     }
   }
+
+#ifdef __APPLE__
+  if(*tundev == '\0') {
+    /* Use default. */
+    if(tap) {
+      strcpy(tundev, "tap0");
+    } else {
+      strcpy(tundev, "tun0");
+    }
+  }
+#endif
 
   if(host != NULL) {
     struct addrinfo hints, *servinfo, *p;
