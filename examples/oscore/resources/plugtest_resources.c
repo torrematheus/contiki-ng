@@ -378,7 +378,11 @@ void test13_a(coap_message_t* request){
   coap_set_header_uri_path(request, urls[1]);
 
   coap_set_oscore(request);
-  
+  uint8_t id[1] = { 0x01 };
+  security_context = oscore_find_ctx_by_rid(id, 1);
+  if( security_context == NULL ){
+	  printf("COULD NOT FIND CONTEXT!\n");
+  }  
   memcpy(security_context->sender_context->sender_key, false_sender_key, 16);
   printf("Test 13a: Sending!\n");
 }
@@ -408,7 +412,11 @@ void test14_a(coap_message_t* request){
   coap_set_header_uri_path(request, urls[1]);
 
   coap_set_oscore(request);
-  
+  uint8_t id[1] = { 0x01 };
+  security_context = oscore_find_ctx_by_rid(id, 1);
+  if( security_context == NULL ){
+	  printf("COULD NOT FIND CONTEXT!\n");
+  }  
   memcpy(security_context->recipient_context->recipient_key, false_recipient_key, 16);
   printf("Test 14a: Sending!\n");
 }
@@ -438,9 +446,13 @@ void test15_a(coap_message_t* request){
   coap_set_header_uri_path(request, urls[1]);
 
   coap_set_oscore(request);
-  
+  uint8_t id[1] = { 0x01 };
+  security_context = oscore_find_ctx_by_rid(id, 1);
+  if( security_context == NULL ){
+	  printf("COULD NOT FIND CONTEXT!\n");
+  }  
   real_sender_seq = security_context->sender_context->seq;
-  security_context->sender_context->seq = 1;
+  security_context->sender_context->seq = 0;
   printf("Test 15a: Sending!\n");
 }
 
@@ -485,122 +497,22 @@ void test16_a_handler(void* response){
     printf("Test 16: PASSED!\n");
   }else {
     printf("Test 16a: FAILED!\n");
-    printf("\t Expected result: 4.02 Bad Option\n");
+    printf("\t Expected result: 4.02 Bad Option, was %d\n", ((coap_message_t*)response)->code );
 
     failed_tests++;
   }
 }
 
-/* 
-
-void test12_a(coap_message_t* request){
-  printf("\n\nTest 12a: Starting!\n");
+void test17_a(coap_message_t* request){
+  printf("\n\nTest 17a: Starting!\n");
   coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
   coap_set_header_uri_path(request, urls[1]);
-
-  coap_set_oscore(request);
-  //request->security_context = oscoap_find_ctx_by_rid(rid, 6); 
   
-  //if(request->security_context == NULL){
-  //  printf("PROBLEMAS!\n");
-  //} 
-  memcpy(request->security_context->recipient_context->recipient_key, false_receiver_key, 16);
-  security_context = request->security_context;
-  printf("Test 12a: Sending!\n");
+  printf("Test 17a: Sending!\n");
 }
 
-void test12_a_handler(void* response){
-  printf("Test 12a: Receiving Response!\n");
-  int res = 0;
-
-  if(((coap_message_t*)response)->code != BAD_REQUEST_4_00){
-    res++;
-  }
-
-  if(res == 0){
-    printf("Test 12: PASSED!\n");
-  }else {
-    printf("Test 12a: FAILED!\n");
-    printf("\t Expected result: 4.00 Bad Request\n");
-
-    failed_tests++;
-  }
-  memcpy(security_context->recipient_context->recipient_key, real_receiver_key, 16);
-} 
-
-void test13_a(coap_message_t* request){
-  printf("\n\nTest 13a: Starting!\n");
-  printf("Restoring Recipient Key from Test 12a. \n");
-  memcpy(security_context->recipient_context->recipient_key, real_receiver_key, 16);
-  coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
-  coap_set_header_uri_path(request, urls[1]);
-
-  coap_set_oscore(request);
-  request->security_context->sender_context->seq = 1;
-  printf("Test 13a: Sending!\n");
-}
-
-void test13_a_handler(void* response){
-  printf("Test 13a: Receiving Response!\n");
-  int res = 0;
-
-  if(((coap_message_t*)response)->code != BAD_REQUEST_4_00){
-    res++;
-  }
-
-  if(res == 0){
-    printf("Test 13: PASSED!\n");
-  }else {
-    printf("Test 13a: FAILED!\n");
-    printf("\t Expected result: 4.00 Bad Request\n");
-
-    failed_tests++;
-  }
-} 
-
-void test14_a(coap_message_t* request){
-  printf("\n\nTest 14a: Starting!\n");
-  coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
-  coap_set_header_uri_path(request, urls[0]);
-
-  coap_set_oscore(request);
-  printf("Test 14a: Sending!\n");
-}
-
-void test14_a_handler(void* response){
-  printf("Test 14a: Receiving Response!\n");
-  int res = 0;
-
-  const uint8_t *response_payload;
-  int len = coap_get_payload(response, &response_payload);
-  if(len != 0){
-    res++;
-  }
-
-  if(((coap_message_t*)response)->type != COAP_TYPE_ACK){
-    res++;
-  }
-
-  if(res == 0){
-    printf("Test 14: PASSED!\n");
-  }else {
-    printf("Test 14a: FAILED!\n");
-    printf("\t Expected result: Empty ACK\n");
-
-    failed_tests++;
-  }
-} 
-
-void test15_a(coap_message_t* request){
-  printf("\n\nTest 15a: Starting!\n");
-  coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
-  coap_set_header_uri_path(request, urls[1]);
-
-  printf("Test 15a: Sending!\n");
-}
-
-void test15_a_handler(void* response){
-  printf("Test 15a: Receiving Response!\n");
+void test17_a_handler(void* response){
+  printf("Test 17a: Receiving Response!\n");
   int res = 0;
 
   if(((coap_message_t*)response)->code != UNAUTHORIZED_4_01){
@@ -608,17 +520,14 @@ void test15_a_handler(void* response){
   }
 
   if(res == 0){
-    printf("Test 15: PASSED!\n");
+    printf("Test 17: PASSED!\n");
   }else {
-    printf("Test 15a: FAILED!\n");
-
-    printf("\t Expected result: UNAUTHORIZED_4_01 was %d\n", ((coap_message_t*)response)->code);
+    printf("Test 17a: FAILED!\n");
+    printf("\t Expected result: 4.01 Unauthorized\n");
 
     failed_tests++;
   }
-} 
-*/
-/*
+}/*
 void test4_a(uip_ipaddr_t *server_ipaddr, uint16_t server_port)
 {
 //  if(obs) {

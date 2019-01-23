@@ -30,7 +30,7 @@
 
 /**
  * \file
- *      An implementation of the CBOR Object Signing and Encryption (RFC).
+ *      An implementation of the CBOR Object Signing and Encryption (RFC 8152).
  * \author
  *      Martin Gunnarsson  <martin.gunnarsson@ri.se>
  *
@@ -76,9 +76,6 @@ typedef struct cose_encrypt0_t {
 
   uint8_t *aad;
   int aad_len;
-
-//  uint8_t *external_aad;
-//  int external_aad_len;
 
   uint8_t *plaintext;
   int plaintext_len;

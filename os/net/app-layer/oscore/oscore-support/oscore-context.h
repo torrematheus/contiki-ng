@@ -30,7 +30,7 @@
 
 /**
  * \file
- *      An implementation of the Object Security for Constrained RESTful Enviornments (Internet-Draft-12) .
+ *      An implementation of the Object Security for Constrained RESTful Enviornments (Internet-Draft-15) .
  * \author
  *      Martin Gunnarsson  <martin.gunnarsson@ri.se>
  *

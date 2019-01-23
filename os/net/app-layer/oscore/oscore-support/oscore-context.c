@@ -30,7 +30,7 @@
 
 /**
  * \file
- *      An implementation of the Object Security for Constrained RESTful Enviornments (Internet-Draft-12) .
+ *      An implementation of the Object Security for Constrained RESTful Enviornments (Internet-Draft-15) .
  * \author
  *      Martin Gunnarsson  <martin.gunnarsson@ri.se>
  *
@@ -126,7 +126,7 @@ oscore_derive_ctx(uint8_t *master_secret, uint8_t master_secret_len, uint8_t *ma
     return 0;
   }
 
-  uint8_t info_buffer[15];
+  uint8_t info_buffer[25];
 
   uint8_t info_len;
 

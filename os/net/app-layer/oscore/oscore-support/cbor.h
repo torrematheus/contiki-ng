@@ -30,7 +30,7 @@
 
 /**
  * \file
- *      An implementation of the Concise Binary Object Representation (RFC).
+ *      An implementation of the Concise Binary Object Representation (RFC 7049).
  * \author
  *      Martin Gunnarsson  <martin.gunnarsson@ri.se>
  *

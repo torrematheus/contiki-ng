@@ -109,8 +109,8 @@ PT_THREAD(coap_blocking_request
 	coap_set_oscore(request);
 	request->security_context = context;
  	//TODO maybe an if and random token should be added here
-	uint8_t token[2] = {0xA, 0xA};
-    	coap_set_token(request, token, 2);
+	//uint8_t token[2] = {0xA, 0xA};
+    	//coap_set_token(request, token, 2);
     } else {
 	printf("NO OSCORE!\n");
 	printf("URL %s \n", uri);

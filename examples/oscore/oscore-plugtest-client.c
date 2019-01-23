@@ -45,6 +45,7 @@
 #include "coap-blocking-api.h"
 #include "dev/button-sensor.h"
 #include "plugtest_resources.h"
+#include "os/lib/random.h" 
 
 #ifdef WITH_OSCORE
 #include "oscore.h"
@@ -55,6 +56,8 @@ uint8_t master_secret[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0
 uint8_t salt[8] = {0x9e, 0x7c, 0xa9, 0x22, 0x23, 0x78, 0x63, 0x40}; 
 uint8_t *sender_id = NULL;
 uint8_t receiver_id[] = { 0x01};
+//uint8_t id_context[8] = {0x37, 0xcb, 0xf3, 0x21, 0x00, 0x17, 0xa2, 0xd3};
+
 #endif /* WITH_OSCORE */
 
 /* Log configuration */
@@ -68,7 +71,7 @@ uint8_t receiver_id[] = { 0x01};
 #define SERVER_EP "coap://[fe80::202:0002:0002:0002]" //Cooja simulation address
 
 
-uint8_t test = 12;
+uint8_t test = 0;
 uint8_t failed_tests = 0;
 
 #define TOGGLE_INTERVAL 10
@@ -78,8 +81,7 @@ AUTOSTART_PROCESSES(&er_example_client);
 
 static struct etimer et;
 
-uint8_t token[2] = { 0x05, 0x05};
-
+uint8_t token[2] = { 0xFF, 0xFF};
 #define NUMBER_OF_URLS 8
 /* leading and ending slashes only for demo purposes, get cropped automatically when setting the Uri-Path */
 char *service_urls[NUMBER_OF_URLS] =
@@ -95,6 +97,7 @@ PROCESS_THREAD(er_example_client, ev, data)
 
   coap_endpoint_parse(SERVER_EP, strlen(SERVER_EP), &server_ep);
 
+  random_init(2);
   /* receives all CoAP messages */
   coap_engine_init();
 
@@ -103,6 +106,7 @@ PROCESS_THREAD(er_example_client, ev, data)
 
   static oscore_ctx_t *context;
   context = oscore_derive_ctx(master_secret, 16, salt, 8, 10, sender_id, 0, receiver_id, 1, NULL, 0, OSCORE_DEFAULT_REPLAY_WINDOW);
+//context = oscore_derive_ctx(master_secret, 16, salt, 8, 10, sender_id, 0, receiver_id, 1, id_context, 8, OSCORE_DEFAULT_REPLAY_WINDOW);
   if(!context){
 	printf("Could not create OSCORE Security Context!\n");
   }
@@ -183,6 +187,9 @@ PROCESS_THREAD(er_example_client, ev, data)
 	  }
 	  test16_a(request);
 	  break;
+        case 17:
+	  test17_a(request);
+	  break;
 	default:
           if(failed_tests == 0){
             printf("ALL tests PASSED!\n");
@@ -191,6 +198,7 @@ PROCESS_THREAD(er_example_client, ev, data)
           }
       }
       if(test != 5 && test != 6 && test != 7){
+        token[1] = (uint8_t)rand();
       	coap_set_token(request, token, 2);
       	COAP_BLOCKING_REQUEST(&server_ep, request, response_handler);
       }
@@ -258,6 +266,9 @@ void response_handler(coap_message_t *response){
       break;
     case 16:
       test16_a_handler(response);
+      break;
+    case 17:
+      test17_a_handler(response);
       break;
     default:
       printf("Default handler\n");

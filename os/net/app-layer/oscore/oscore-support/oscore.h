@@ -30,7 +30,7 @@
 
 /**
  * \file
- *      An implementation of the Object Security for Constrained RESTful Enviornments (Internet-Draft-12) .
+ *      An implementation of the Object Security for Constrained RESTful Enviornments (Internet-Draft-15) .
  * \author
  *      Martin Gunnarsson  <martin.gunnarsson@ri.se>
  *
@@ -68,8 +68,8 @@ size_t oscore_prepare_aad(coap_message_t *coap_pkt, cose_encrypt0_t *cose, uint8
 /* Creates Nonce */
 void oscore_generate_nonce(cose_encrypt0_t *ptr, coap_message_t *coap_pkt, uint8_t *buffer, uint8_t size);
 
-/*Remove all protected options */
-void oscore_clear_options(coap_message_t *ptr);
+/*Remove all protected options and hide CoAP Code. */
+void oscore_clear_header_options(coap_message_t *ptr);
 
 /*Return 1 if OK, Error code otherwise */
 uint8_t oscore_validate_sender_seq(oscore_recipient_ctx_t *ctx, cose_encrypt0_t *cose);
