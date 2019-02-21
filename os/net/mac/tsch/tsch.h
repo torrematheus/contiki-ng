@@ -88,6 +88,10 @@ frequency hopping for enhanced reliability.
 #define TSCH_CALLBACK_KA_SENT tsch_rpl_callback_ka_sent
 #endif /* TSCH_CALLBACK_KA_SENT */
 
+#ifndef TSCH_RPL_CHECK_DODAG_JOINED
+#define TSCH_RPL_CHECK_DODAG_JOINED tsch_rpl_check_dodag_joined
+#endif /* TSCH_RPL_CHECK_DODAG_JOINED */
+
 #endif /* UIP_CONF_IPV6_RPL */
 
 #if BUILD_WITH_ORCHESTRA
@@ -115,6 +119,11 @@ void TSCH_CALLBACK_LEAVING_NETWORK();
 /* Called by TSCH after sending a keep-alive */
 #ifdef TSCH_CALLBACK_KA_SENT
 void TSCH_CALLBACK_KA_SENT();
+#endif
+
+/* Called by TSCH before sending a EB */
+#ifdef TSCH_RPL_CHECK_DODAG_JOINED
+int TSCH_RPL_CHECK_DODAG_JOINED();
 #endif
 
 /* Called by TSCH form interrupt after receiving a frame, enabled upper-layer to decide
@@ -226,6 +235,12 @@ void tsch_schedule_keepalive(void);
   * Schedule a keep-alive immediately
   */
 void tsch_schedule_keepalive_immediately(void);
+/**
+  * Get the time, in clock ticks, since the TSCH network was started.
+  *
+  * \return The network uptime, or -1 if the node is not part of a TSCH network.
+  */
+uint64_t tsch_get_network_uptime_ticks(void);
 /**
   * Leave the TSCH network we are currently in
   */
