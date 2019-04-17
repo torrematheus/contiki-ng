@@ -42,6 +42,8 @@
 #include "contiki.h"
 #include "coap-engine.h"
 
+#include "coap-keystore-simple.h"
+
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "App"
@@ -63,7 +65,7 @@ PROCESS_THREAD(er_example_server, ev, data)
   PROCESS_PAUSE();
 
   LOG_INFO("Starting Erbium Example Server\n");
-
+  printf("COAP_DTLS_PSK_DEFAULT_KEY :  %s\n", COAP_DTLS_PSK_DEFAULT_KEY);
   /*
    * Bind the resources to their Uri-Path.
    * WARNING: Activating twice only means alternate path, not two instances!
