@@ -31,49 +31,76 @@
 
 /**
  * \file
- *      Example resource
+ *      Erbium (Er) CoAP Engine example.
  * \author
  *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "contiki.h"
 #include "coap-engine.h"
 
-#include <string.h>
+#include "oscore.h"
+#include "oscore-context.h"
 
 
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_APP
+/*
+ * Resources to be activated need to be imported through the extern keyword.
+ * The build system automatically compiles the resources in the corresponding sub-directory.
+ */
+extern coap_resource_t
+  res_post;
+uint8_t master_secret[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+uint8_t salt[8] = {0x9e, 0x7c, 0xa9, 0x22, 0x23, 0x78, 0x63, 0x40};
+uint8_t sender_id[] = { 0x53 };
+uint8_t receiver_id[] = { 0x43 };
 
-static void res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+PROCESS(er_example_server, "Erbium Example Server");
+AUTOSTART_PROCESSES(&er_example_server);
 
-/* A simple actuator example, depending on the color query parameter and post variable mode, corresponding led is activated or deactivated */
-RESOURCE(res_post,
-         "",
-         NULL,
-         res_post_put_handler,
-         res_post_put_handler,
-         NULL);
-
-static uint8_t response_payload[100]; 
-static void
-res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+PROCESS_THREAD(er_example_server, ev, data)
 {
-  const uint8_t *payload = NULL;
-  int payload_len = coap_get_payload(request, &payload);
-  if( payload_len != 0 && payload != NULL) {
+  PROCESS_BEGIN();
 
-  	for (int i = 0; i < payload_len; i++){
-		response_payload[i] = (payload[i] - 32); 
-	}
-  	coap_set_payload(response, response_payload, payload_len); 
-    	coap_set_header_content_format(response, TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
-  	coap_set_status_code(response, CHANGED_2_04);
+  PROCESS_PAUSE();
+  oscore_init_server();
 
-  } else {
-  	coap_set_status_code(response, BAD_REQUEST_4_00);
+  LOG_INFO("Starting Erbium Example Server\n");
+
+  /*
+   * Bind the resources to their Uri-Path.
+   * WARNING: Activating twice only means alternate path, not two instances!
+   * All static variables are the same for each URI path.
+   */
+  coap_activate_resource(&res_post, "test/caps");
+
+  static oscore_ctx_t *context;
+  context = oscore_derive_ctx(master_secret, 16, salt, 8, 10, sender_id, 1, receiver_id, 1, NULL, 0, OSCORE_DEFAULT_REPLAY_WINDOW);
+  if(!context){
+        printf("Could not create OSCORE Security Context!\n");
   }
 
+  uint8_t key_id[] = { 0x43 };
+  oscore_ctx_t *ctx;
+  ctx = oscore_find_ctx_by_rid(key_id, 1);
+  if(ctx == NULL){
+    printf("CONTEXT NOT FOUND\n");
+  }else {
+    printf("context FOUND!\n");
+  }
+
+
+  oscore_protect_resource(&res_post);
+  /* Define application-specific events here. */
+  while(1) {
+    PROCESS_WAIT_EVENT();
+  }                             /* while (1) */
+
+  PROCESS_END();
 }

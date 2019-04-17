@@ -31,49 +31,50 @@
 
 /**
  * \file
- *      Example resource
+ *      Erbium (Er) CoAP Engine example.
  * \author
  *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "contiki.h"
 #include "coap-engine.h"
-
-#include <string.h>
-
 
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_APP
+/*
+ * Resources to be activated need to be imported through the extern keyword.
+ * The build system automatically compiles the resources in the corresponding sub-directory.
+ */
+extern coap_resource_t
+  res_post;
 
-static void res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+PROCESS(er_example_server, "Erbium Example Server");
+AUTOSTART_PROCESSES(&er_example_server);
 
-/* A simple actuator example, depending on the color query parameter and post variable mode, corresponding led is activated or deactivated */
-RESOURCE(res_post,
-         "",
-         NULL,
-         res_post_put_handler,
-         res_post_put_handler,
-         NULL);
-
-static uint8_t response_payload[100]; 
-static void
-res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+PROCESS_THREAD(er_example_server, ev, data)
 {
-  const uint8_t *payload = NULL;
-  int payload_len = coap_get_payload(request, &payload);
-  if( payload_len != 0 && payload != NULL) {
+  PROCESS_BEGIN();
 
-  	for (int i = 0; i < payload_len; i++){
-		response_payload[i] = (payload[i] - 32); 
-	}
-  	coap_set_payload(response, response_payload, payload_len); 
-    	coap_set_header_content_format(response, TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
-  	coap_set_status_code(response, CHANGED_2_04);
+  PROCESS_PAUSE();
 
-  } else {
-  	coap_set_status_code(response, BAD_REQUEST_4_00);
-  }
+  LOG_INFO("Starting Erbium Example Server\n");
 
+  /*
+   * Bind the resources to their Uri-Path.
+   * WARNING: Activating twice only means alternate path, not two instances!
+   * All static variables are the same for each URI path.
+   */
+  coap_activate_resource(&res_post, "test/caps");
+
+  /* Define application-specific events here. */
+  while(1) {
+    PROCESS_WAIT_EVENT();
+  }                             /* while (1) */
+
+  PROCESS_END();
 }

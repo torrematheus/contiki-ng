@@ -31,49 +31,14 @@
 
 /**
  * \file
- *      Example resource
+ *      Erbium (Er) example project configuration.
  * \author
  *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
  */
 
-#include "contiki.h"
-#include "coap-engine.h"
+#ifndef PROJECT_CONF_H_
+#define PROJECT_CONF_H_
 
-#include <string.h>
+#define LOG_LEVEL_APP LOG_LEVEL_DBG
 
-
-/* Log configuration */
-#include "sys/log.h"
-#define LOG_MODULE "App"
-#define LOG_LEVEL LOG_LEVEL_APP
-
-static void res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
-
-/* A simple actuator example, depending on the color query parameter and post variable mode, corresponding led is activated or deactivated */
-RESOURCE(res_post,
-         "",
-         NULL,
-         res_post_put_handler,
-         res_post_put_handler,
-         NULL);
-
-static uint8_t response_payload[100]; 
-static void
-res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
-{
-  const uint8_t *payload = NULL;
-  int payload_len = coap_get_payload(request, &payload);
-  if( payload_len != 0 && payload != NULL) {
-
-  	for (int i = 0; i < payload_len; i++){
-		response_payload[i] = (payload[i] - 32); 
-	}
-  	coap_set_payload(response, response_payload, payload_len); 
-    	coap_set_header_content_format(response, TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
-  	coap_set_status_code(response, CHANGED_2_04);
-
-  } else {
-  	coap_set_status_code(response, BAD_REQUEST_4_00);
-  }
-
-}
+#endif /* PROJECT_CONF_H_ */
