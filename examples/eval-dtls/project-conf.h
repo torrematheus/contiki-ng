@@ -41,4 +41,12 @@
 
 #define LOG_LEVEL_APP LOG_LEVEL_DBG
 
+#define DTLS_PSK 1
+#define COAP_DTLS_PSK_DEFAULT_IDENTITY "user"
+#define COAP_DTLS_PSK_DEFAULT_KEY      "password"
+
+//#define LOG_CONF_LEVEL_COAP LOG_LEVEL_DBG
+//#define LOG_CONF_LEVEL_DTLS LOG_LEVEL_DBG
+
+
 #endif /* PROJECT_CONF_H_ */

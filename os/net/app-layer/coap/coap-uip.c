@@ -570,6 +570,9 @@ get_psk_info(struct dtls_context_t *ctx,
     memcpy(result, ks.key, ks.key_len);
     LOG_DBG("psk with %u bytes found\n", ks.key_len);
     return ks.key_len;
+//Fix
+  case DTLS_PSK_HINT:
+    return 0;
 
   default:
     LOG_WARN("unsupported key store request type: %d\n", type);
