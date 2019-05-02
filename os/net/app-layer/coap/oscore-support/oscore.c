@@ -56,7 +56,9 @@ printf_hex(unsigned char *data, unsigned int len)
   unsigned int i = 0;
   for(i = 0; i < len; i++) {
     LOG_DBG_("%02x ", data[i]);
+    printf("%02x ", data[i]);
   }
+  printf("\n");
   LOG_DBG_("\n");
 }
 uint8_t
@@ -85,19 +87,23 @@ oscore_protect_resource(coap_resource_t *resource)
   resource->oscore_protected = 1;
 }
 uint8_t
-u64tob(uint64_t in, uint8_t *buffer)
+u64tob(uint64_t value, uint8_t *buffer)
 {
-   
-  memcpy(buffer, &in, 8);
-  
-  uint8_t i;
-  for( i = 7; i >= 0; i--){
-    if( buffer[i] == 0 ){
- 	break;
-    }  
+  memset(buffer, 0, 8);
+  uint8_t length = 0;
+  for( int i = 0; i < 8; i++){
+        uint8_t temp = (value >> (8*i)) & 0xFF;
+
+        if( temp != 0){
+                length = i+1;
+        }
   }
 
-  return 8 - i;
+  for ( int i = 0; i < length; i++){
+          buffer[length - i -1] = (value >> (8*i)) & 0xFF;
+  }  
+  return length == 0 ? 1 : length;
+
 }
 uint64_t
 btou64(uint8_t *bytes, size_t len)
@@ -122,15 +128,15 @@ btou64(uint8_t *bytes, size_t len)
   return num;
 }
 int
-oscore_encode_option_value(uint8_t *option_buffer, cose_encrypt0_t *cose)
+oscore_encode_option_value(uint8_t *option_buffer, cose_encrypt0_t *cose, uint8_t include_partial_iv)
 {
   uint8_t offset = 1;
   if(cose->partial_iv_len > 5){
 	  return 0;
   }
   option_buffer[0] = 0;
-  if(cose->partial_iv_len > 0 && cose->partial_iv != NULL) {
-    option_buffer[0] |= (0x05 & cose->partial_iv_len);
+  if(cose->partial_iv_len > 0 && cose->partial_iv != NULL && include_partial_iv) {
+    option_buffer[0] |= (0x07 & cose->partial_iv_len);
     memcpy(&(option_buffer[offset]), cose->partial_iv, cose->partial_iv_len);
     offset += cose->partial_iv_len;
   }
@@ -161,7 +167,7 @@ oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_
     return BAD_OPTION_4_02;
   }
 
-  uint8_t partial_iv_len = (option_value[0] & 0x05);
+  uint8_t partial_iv_len = (option_value[0] & 0x07);
   uint8_t offset = 1;
   if(partial_iv_len != 0) {    
     if( offset + partial_iv_len > option_len) {
@@ -175,7 +181,6 @@ oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_
   /* If h-flag is set KID-Context field is present. */
   if((option_value[0] & 0x10) != 0) {
     uint8_t kid_context_len = option_value[offset];
-    printf("kid context len %d\n", kid_context_len);
     offset++;
     if (offset + kid_context_len > option_len) {
       return BAD_OPTION_4_02;
@@ -293,14 +298,11 @@ oscore_populate_cose(coap_message_t *pkt, cose_encrypt0_t *cose, oscore_ctx_t *c
     if(sending){
       partial_iv_len = u64tob(ctx->recipient_context->recent_seq, partial_iv_buffer);
       cose_encrypt0_set_partial_iv(cose, partial_iv_buffer, partial_iv_len);
-      cose_encrypt0_set_key_id(cose, ctx->sender_context->sender_id, ctx->sender_context->sender_id_len);
-      //TODO what sender id should be used here, also in the else case.
-      //cose_encrypt0_set_key_id(cose, ctx->recipient_context->recipient_id, ctx->recipient_context->recipient_id_len);
+      cose_encrypt0_set_key_id(cose, ctx->recipient_context->recipient_id, ctx->recipient_context->recipient_id_len);
       cose_encrypt0_set_key(cose, ctx->sender_context->sender_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
     } else { /* receiving */
       /* Partial IV set when getting seq from exchange. */
-      cose_encrypt0_set_key_id(cose, ctx->recipient_context->recipient_id, ctx->recipient_context->recipient_id_len);
-      //cose_encrypt0_set_key_id(cose, ctx->sender_context->sender_id, ctx->sender_context->sender_id_len);
+      cose_encrypt0_set_key_id(cose, ctx->sender_context->sender_id, ctx->sender_context->sender_id_len);
       cose_encrypt0_set_key(cose, ctx->recipient_context->recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
     }
   }
@@ -330,7 +332,7 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
 
   uint8_t plaintext_len = oscore_serializer(coap_pkt, plaintext_buffer, ROLE_CONFIDENTIAL);
   cose_encrypt0_set_plaintext(cose, plaintext_buffer, plaintext_len);
-  printf("partial iv len %d\n", cose->partial_iv_len); 
+  
   uint8_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, 1);
   cose_encrypt0_set_aad(cose, aad_buffer, aad_len);
   
@@ -344,14 +346,15 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
     }
     oscore_increment_sender_seq(ctx);
   }
-  uint8_t ciphertext_len = cose_encrypt0_encrypt(cose, ciphertext_buffer, plaintext_len + 8);
   
-  //TODO quuickfix to solve wrong Nonce on response encryption
-//  if(!coap_is_request(coap_pkt)){
-//	  cose_encrypt0_set_partial_iv(cose, NULL, 0);
-//  }	  
-  
-  uint8_t option_value_len = oscore_encode_option_value(option_value_buffer, cose);
+  int ciphertext_len = cose_encrypt0_encrypt(cose, ciphertext_buffer, plaintext_len + 8);
+  uint8_t option_value_len = 0;
+  if(coap_is_request(coap_pkt)){
+	option_value_len = oscore_encode_option_value(option_value_buffer, cose, 1);
+  } else { //Partial IV shall NOT be included in responses
+	option_value_len = oscore_encode_option_value(option_value_buffer, cose, 0);
+  }
+
   
   coap_set_payload(coap_pkt, ciphertext_buffer, ciphertext_len);
   coap_set_header_object_security(coap_pkt, option_value_buffer, option_value_len);
@@ -441,6 +444,7 @@ oscore_validate_sender_seq(oscore_recipient_ctx_t *ctx, cose_encrypt0_t *cose)
 {
   int64_t incomming_seq = btou64(cose->partial_iv, cose->partial_iv_len);
 //todo add LOG_DBG here 
+  LOG_DBG_("Incomming SEQ %" PRIi64 "\n", incomming_seq);
   ctx->rollback_largest_seq = ctx->largest_seq;
   ctx->rollback_sliding_window = ctx->sliding_window;
 
