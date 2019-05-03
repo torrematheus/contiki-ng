@@ -159,7 +159,7 @@ oscore_encode_option_value(uint8_t *option_buffer, cose_encrypt0_t *cose, uint8_
   }
   return offset;
 }
-int
+coap_status_t
 oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_t *cose)
 {
   
@@ -196,7 +196,7 @@ oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_
     }
     cose_encrypt0_set_key_id(cose, &(option_value[offset]), kid_len);
   }
-  return 0;
+  return NO_ERROR;
 }
 /* Decodes a OSCORE message and passes it on to the COAP engine. */
 coap_status_t
@@ -208,8 +208,12 @@ oscore_decode_message(coap_message_t *coap_pkt)
   uint8_t nonce_buffer[13];
   cose_encrypt0_init(cose);
   /* Options are discarded later when they are overwritten. This should be improved */
-  oscore_decode_option_value(coap_pkt->object_security, coap_pkt->object_security_len, cose);
-
+	  coap_status_t ret = oscore_decode_option_value(coap_pkt->object_security, coap_pkt->object_security_len, cose);
+  if( ret != NO_ERROR){
+	 LOG_DBG_("OSCORE option value could not be parsed.\n");
+	 coap_error_message = "OSCORE option could not be parsed.";
+	 return ret;
+  }
   if(coap_is_request(coap_pkt)) {
     uint8_t *key_id;
     int key_id_len = cose_encrypt0_get_key_id(cose, &key_id);
@@ -316,10 +320,10 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
 {
   cose_encrypt0_t cose[1];
   cose_encrypt0_init(cose);
-  uint8_t plaintext_buffer[COAP_MAX_HEADER_SIZE];
+  uint8_t plaintext_buffer[COAP_MAX_CHUNK_SIZE];
   uint8_t ciphertext_buffer[COAP_MAX_CHUNK_SIZE + COSE_algorithm_AES_CCM_16_64_128_TAG_LEN];
   uint8_t aad_buffer[35];
-  uint8_t nonce_buffer[13];
+  uint8_t nonce_buffer[COSE_algorithm_AES_CCM_16_64_128_IV_LEN];
   uint8_t option_value_buffer[15];
 /*  1 Retrieve the Sender Context associated with the target resource. */
   oscore_ctx_t *ctx = coap_pkt->security_context;
@@ -327,17 +331,21 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
     LOG_DBG_("No context in OSCORE!\n");
     return PACKET_SERIALIZATION_ERROR;
   }
-  
   oscore_populate_cose(coap_pkt, cose, coap_pkt->security_context, 1);
 
   uint8_t plaintext_len = oscore_serializer(coap_pkt, plaintext_buffer, ROLE_CONFIDENTIAL);
+  if( plaintext_len > COAP_MAX_CHUNK_SIZE){
+    LOG_DBG_("OSCORE Message to large to process.\n");
+    return PACKET_SERIALIZATION_ERROR;
+  }
+
   cose_encrypt0_set_plaintext(cose, plaintext_buffer, plaintext_len);
   
   uint8_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, 1);
   cose_encrypt0_set_aad(cose, aad_buffer, aad_len);
   
-  oscore_generate_nonce(cose, coap_pkt, nonce_buffer, 13);
-  cose_encrypt0_set_nonce(cose, nonce_buffer, 13);
+  oscore_generate_nonce(cose, coap_pkt, nonce_buffer, COSE_algorithm_AES_CCM_16_64_128_IV_LEN);
+  cose_encrypt0_set_nonce(cose, nonce_buffer, COSE_algorithm_AES_CCM_16_64_128_IV_LEN);
   
   if(coap_is_request(coap_pkt)){
     if(!oscore_set_exchange(coap_pkt->token, coap_pkt->token_len, ctx->sender_context->seq, ctx)){
@@ -346,8 +354,12 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
     }
     oscore_increment_sender_seq(ctx);
   }
+  int ciphertext_len = cose_encrypt0_encrypt(cose, ciphertext_buffer, plaintext_len + COSE_algorithm_AES_CCM_16_64_128_TAG_LEN);
+  if( ciphertext_len < 0){
+    LOG_DBG_("OSCORE internal error %d.\n", ciphertext_len);
+    return PACKET_SERIALIZATION_ERROR;
+  }
   
-  int ciphertext_len = cose_encrypt0_encrypt(cose, ciphertext_buffer, plaintext_len + 8);
   uint8_t option_value_len = 0;
   if(coap_is_request(coap_pkt)){
 	option_value_len = oscore_encode_option_value(option_value_buffer, cose, 1);

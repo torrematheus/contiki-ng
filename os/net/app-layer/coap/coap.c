@@ -427,7 +427,6 @@ coap_serialize_message(coap_message_t *coap_pkt, uint8_t *buffer)
     if(coap_is_option(coap_pkt, COAP_OPTION_OSCORE)){
        LOG_DBG_("Sending OSCORE message.\n");
        size_t s = oscore_prepare_message(coap_pkt, buffer);
-       printf_hex(buffer, s);
        return s;
     }else{
        LOG_DBG_("Sending COAP message.\n");
