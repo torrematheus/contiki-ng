@@ -205,7 +205,7 @@ oscore_decode_message(coap_message_t *coap_pkt)
   cose_encrypt0_t cose[1];
   oscore_ctx_t *ctx = NULL;
   uint8_t aad_buffer[35];
-  uint8_t nonce_buffer[13];
+  uint8_t nonce_buffer[COSE_algorithm_AES_CCM_16_64_128_IV_LEN];
   cose_encrypt0_init(cose);
   /* Options are discarded later when they are overwritten. This should be improved */
 	  coap_status_t ret = oscore_decode_option_value(coap_pkt->object_security, coap_pkt->object_security_len, cose);
@@ -229,7 +229,7 @@ oscore_decode_message(coap_message_t *coap_pkt)
       coap_error_message = "Replay detected";
       return UNAUTHORIZED_4_01;
     }
-    cose_encrypt0_set_key(cose, ctx->recipient_context->recipient_key, 16);
+    cose_encrypt0_set_key(cose, ctx->recipient_context->recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
   } else { /* Message is a response */
     uint64_t seq;
     uint8_t seq_buffer[8];
@@ -255,10 +255,9 @@ oscore_decode_message(coap_message_t *coap_pkt)
   oscore_generate_nonce(cose, coap_pkt, nonce_buffer, 13);
   cose_encrypt0_set_nonce(cose, nonce_buffer, 13);
   
-  uint8_t plaintext_buffer[COAP_MAX_CHUNK_SIZE - COSE_algorithm_AES_CCM_16_64_128_TAG_LEN];  
-  cose_encrypt0_set_ciphertext(cose, coap_pkt->payload, coap_pkt->payload_len);
+  cose_encrypt0_set_content(cose, coap_pkt->payload, coap_pkt->payload_len);
 
-  int res = cose_encrypt0_decrypt(cose, plaintext_buffer, coap_pkt->payload_len - 8);
+  int res = cose_encrypt0_decrypt(cose);
   if(res <= 0) {
     LOG_DBG_("OSCORE Decryption Failure, result code: %d\n", res);
     if(coap_is_request(coap_pkt)) {
@@ -271,11 +270,7 @@ oscore_decode_message(coap_message_t *coap_pkt)
     }  
   }
 
-  /*Move the plaintext to the ciphtertext buffer so that it remains when this function returns and plaintext buffer is dealocated.*/
-  memcpy(cose->ciphertext, plaintext_buffer, coap_pkt->payload_len - 8);
-  cose->plaintext = cose->ciphertext;
-
-  coap_status_t status = oscore_parser(coap_pkt, cose->plaintext, res, ROLE_CONFIDENTIAL);
+  coap_status_t status = oscore_parser(coap_pkt, cose->content, res, ROLE_CONFIDENTIAL);
   return status;
 }
 
@@ -320,8 +315,7 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
 {
   cose_encrypt0_t cose[1];
   cose_encrypt0_init(cose);
-  uint8_t plaintext_buffer[COAP_MAX_CHUNK_SIZE];
-  uint8_t ciphertext_buffer[COAP_MAX_CHUNK_SIZE + COSE_algorithm_AES_CCM_16_64_128_TAG_LEN];
+  uint8_t content_buffer[COAP_MAX_CHUNK_SIZE + COSE_algorithm_AES_CCM_16_64_128_TAG_LEN];
   uint8_t aad_buffer[35];
   uint8_t nonce_buffer[COSE_algorithm_AES_CCM_16_64_128_IV_LEN];
   uint8_t option_value_buffer[15];
@@ -333,13 +327,13 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
   }
   oscore_populate_cose(coap_pkt, cose, coap_pkt->security_context, 1);
 
-  uint8_t plaintext_len = oscore_serializer(coap_pkt, plaintext_buffer, ROLE_CONFIDENTIAL);
+  uint8_t plaintext_len = oscore_serializer(coap_pkt, content_buffer, ROLE_CONFIDENTIAL);
   if( plaintext_len > COAP_MAX_CHUNK_SIZE){
     LOG_DBG_("OSCORE Message to large to process.\n");
     return PACKET_SERIALIZATION_ERROR;
   }
 
-  cose_encrypt0_set_plaintext(cose, plaintext_buffer, plaintext_len);
+  cose_encrypt0_set_content(cose, content_buffer, plaintext_len);
   
   uint8_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, 1);
   cose_encrypt0_set_aad(cose, aad_buffer, aad_len);
@@ -354,7 +348,7 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
     }
     oscore_increment_sender_seq(ctx);
   }
-  int ciphertext_len = cose_encrypt0_encrypt(cose, ciphertext_buffer, plaintext_len + COSE_algorithm_AES_CCM_16_64_128_TAG_LEN);
+  int ciphertext_len = cose_encrypt0_encrypt(cose);
   if( ciphertext_len < 0){
     LOG_DBG_("OSCORE internal error %d.\n", ciphertext_len);
     return PACKET_SERIALIZATION_ERROR;
@@ -368,7 +362,7 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
   }
 
   
-  coap_set_payload(coap_pkt, ciphertext_buffer, ciphertext_len);
+  coap_set_payload(coap_pkt, content_buffer, ciphertext_len);
   coap_set_header_object_security(coap_pkt, option_value_buffer, option_value_len);
   
   /* Overwrite the CoAP code. */
