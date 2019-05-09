@@ -44,7 +44,9 @@
 #include "coap.h"
 #include "stdio.h"
 #include "inttypes.h"
-
+#ifdef OSCORE_CRYPTO_TEST
+#include "sys/rtimer.h"
+#endif
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "coap"
@@ -256,8 +258,14 @@ oscore_decode_message(coap_message_t *coap_pkt)
   cose_encrypt0_set_nonce(cose, nonce_buffer, 13);
   
   cose_encrypt0_set_content(cose, coap_pkt->payload, coap_pkt->payload_len);
-
+#ifdef OSCORE_CRYPTO_TEST
+  unsigned long start = RTIMER_NOW();
+#endif
   int res = cose_encrypt0_decrypt(cose);
+#ifdef OSCORE_CRYPTO_TEST
+  unsigned long end = RTIMER_NOW();
+  printf("D: %lu\n", (end - start));
+#endif
   if(res <= 0) {
     LOG_DBG_("OSCORE Decryption Failure, result code: %d\n", res);
     if(coap_is_request(coap_pkt)) {
@@ -348,7 +356,14 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
     }
     oscore_increment_sender_seq(ctx);
   }
-  int ciphertext_len = cose_encrypt0_encrypt(cose);
+#ifdef OSCORE_CRYPTO_TEST
+  unsigned long  start = RTIMER_NOW();
+#endif
+int ciphertext_len = cose_encrypt0_encrypt(cose);
+#ifdef OSCORE_CRYPTO_TEST
+  unsigned long end = RTIMER_NOW();
+  printf("E: %lu\n", (end - start));
+#endif
   if( ciphertext_len < 0){
     LOG_DBG_("OSCORE internal error %d.\n", ciphertext_len);
     return PACKET_SERIALIZATION_ERROR;
