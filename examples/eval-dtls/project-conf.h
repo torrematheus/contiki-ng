@@ -52,8 +52,8 @@
 #define DTLS_MAX_BUF        256
 
 //#define DTLS_CRYPTO_TEST 1
-#define STACK_USAGE 1
-
+//#define STACK_USAGE 1
+#define PROCESSING_TIME 1
 //#define LOG_CONF_LEVEL_COAP LOG_LEVEL_DBG
 //#define LOG_CONF_LEVEL_DTLS LOG_LEVEL_DBG
 

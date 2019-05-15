@@ -47,7 +47,8 @@
 #define REST_MAX_CHUNK_SIZE 256
 #define DTLS_MAX_BUF        256
 
-#define STACK_USAGE 1
+#define PROCESSING_TIME 1
+//#define STACK_USAGE 1
 //#define OSCORE_CRYPTO_TEST 1
 //#define OSCORE_PROCESS_TEST 1
 //#define OSCORE_RADIO_TEST 1

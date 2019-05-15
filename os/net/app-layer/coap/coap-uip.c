@@ -85,6 +85,12 @@ static const coap_keystore_t *dtls_keystore = NULL;
 static struct uip_udp_conn *dtls_conn = NULL;
 #endif /* WITH_DTLS */
 
+#ifdef PROCESSING_TIME 
+#include "rtimer.h"
+extern unsigned long _processing_time_start;
+extern unsigned long _processing_time_stop;
+#endif
+
 PROCESS(coap_engine, "CoAP Engine");
 
 static struct uip_udp_conn *udp_conn = NULL;
@@ -439,11 +445,25 @@ PROCESS_THREAD(coap_engine, ev, data)
       if(uip_newdata()) {
 #ifdef WITH_DTLS
         if(uip_udp_conn == dtls_conn) {
-          process_secure_data();
-          continue;
+          #ifdef PROCESSING_TIME 
+	  _processing_time_start = RTIMER_NOW();
+	  #endif
+	  process_secure_data();
+	  #ifdef PROCESSING_TIME
+	  _processing_time_stop = RIMTER_NOW();
+	  printf("s: %lu\n", (_processing_time_stop - _processing_time_start));
+	  #endif
+	  continue;
         }
 #endif /* WITH_DTLS */
-        process_data();
+	#ifdef PROCESSING_TIME
+	_processing_time_start = RTIMER_NOW();
+	#endif
+	process_data();
+	#ifdef PROCESSING_TIME
+	_processing_time_stop = RTIMER_NOW();
+	printf("s: %lu\n", (_processing_time_stop - _processing_time_start));
+	#endif
       }
     }
   } /* while (1) */

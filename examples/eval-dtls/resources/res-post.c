@@ -41,6 +41,11 @@
 
 #include <string.h>
 
+#ifdef PROCESSING_TIME
+#include "rtimer.h"
+unsigned long _processing_time_start = 0;
+unsigned long _processing_time_stop = 0;
+#endif
 
 /* Log configuration */
 #include "sys/log.h"
@@ -61,6 +66,10 @@ static uint8_t response_payload[256];
 static void
 res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
+  #ifdef PROCESSING_TIME
+  _processing_time_stop = RTIMER_NOW();
+  printf("p: %lu\n", (_processing_time_stop - _processing_time_start));
+  #endif
   const uint8_t *payload = NULL;
   int payload_len = coap_get_payload(request, &payload);
   if( payload_len != 0 && payload != NULL) {
@@ -75,5 +84,8 @@ res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t 
   } else {
   	coap_set_status_code(response, BAD_REQUEST_4_00);
   }
+  #ifdef PROCESSING_TIME
+  _processing_time_start = RTIMER_NOW();
+  #endif
 
 }
