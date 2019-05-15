@@ -44,6 +44,12 @@
 
 #include "coap-keystore-simple.h"
 
+#ifdef STACK_USAGE
+#include "etimer.h"
+void set_stack();
+void read_stack();
+#endif
+
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "App"
@@ -73,9 +79,23 @@ PROCESS_THREAD(er_example_server, ev, data)
    */
   coap_activate_resource(&res_post, "test/caps");
 
+#ifdef STACK_USAGE
+  static struct etimer t;
+  set_stack();
+  etimer_set(&t, 5*60*CLOCK_SECOND);
+#endif
+
+
+
   /* Define application-specific events here. */
   while(1) {
+#ifdef STACK_USAGE
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&t));
+    read_stack();
+    etimer_reset(&t);
+#else
     PROCESS_WAIT_EVENT();
+#endif
   }                             /* while (1) */
 
   PROCESS_END();

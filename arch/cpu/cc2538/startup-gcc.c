@@ -306,6 +306,7 @@ default_handler(void)
   while(1);
 }
 /*---------------------------------------------------------------------------*/
+void set_stack();
 void
 reset_handler(void)
 {
@@ -316,13 +317,50 @@ reset_handler(void)
 
   /* Zero-fill the bss segment. */
   rom_util_memset(&_bss, 0, &_ebss - &_bss);
-
   /* call the application's entry point. */
+  
   main();
 
   /* End here if main () returns */
   while(1);
 }
 /*---------------------------------------------------------------------------*/
+void set_stack(){
+	uint8_t sp_v;
+	uint8_t* sp = (uint8_t*)(&sp_v);
+	printf("sp %p\n", sp);
+	sp -= 40; //move outside current function
+	uint8_t* stack_top = (uint8_t*)(&(stack[0]));
+	int i = 0;
+	while(sp >= stack_top){
+		*sp = 0x19;
+		sp--;
+		i++;
+	} 
+
+	printf("%d bytes written\n", i);
+
+}
+
+void read_stack(){
+	int j = 0;
+	int k = 0;
+	
+	uint8_t *e_stack = (uint8_t*)(&(stack[0]));
+	printf("e_stack %p \n", e_stack);
+	for( int i = 0; i < 256*8; i++){
+		if( e_stack[i] != 0x19){
+			k++;
+		}else{
+			j++;
+		}
+
+	}
+	printf("stack: clean %d, dirty %d segments\n", j,k);
+	printf("stack start %p\n", &(stack[0]));
+	printf("stack end %p\n", &(stack[255]));
+
+}
+
 
 /** @} */

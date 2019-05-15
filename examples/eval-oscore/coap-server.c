@@ -42,6 +42,7 @@
 #include "contiki.h"
 #include "coap-engine.h"
 
+#include "etimer.h"
 #include "oscore.h"
 #include "oscore-context.h"
 
@@ -61,6 +62,10 @@ uint8_t salt[8] = {0x9e, 0x7c, 0xa9, 0x22, 0x23, 0x78, 0x63, 0x40};
 uint8_t sender_id[] = { 0x53 };
 uint8_t receiver_id[] = { 0x43 };
 
+
+void set_stack();
+void read_stack();
+
 PROCESS(er_example_server, "Erbium Example Server");
 AUTOSTART_PROCESSES(&er_example_server);
 
@@ -70,7 +75,7 @@ PROCESS_THREAD(er_example_server, ev, data)
 
   PROCESS_PAUSE();
   oscore_init_server();
-
+  
   LOG_INFO("Starting Erbium Example Server\n");
 
   /*
@@ -95,11 +100,24 @@ PROCESS_THREAD(er_example_server, ev, data)
     printf("context FOUND!\n");
   }
 
-
   oscore_protect_resource(&res_post);
+  
+#ifdef STACK_USAGE
+  static struct etimer t;
+  set_stack(); 
+  etimer_set(&t, 5*60*CLOCK_SECOND);
+#endif
+
+
   /* Define application-specific events here. */
   while(1) {
+#ifdef STACK_USAGE
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&t));	
+    read_stack();
+    etimer_reset(&t);
+#else
     PROCESS_WAIT_EVENT();
+#endif
   }                             /* while (1) */
 
   PROCESS_END();
