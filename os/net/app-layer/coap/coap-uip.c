@@ -450,7 +450,7 @@ PROCESS_THREAD(coap_engine, ev, data)
 	  #endif
 	  process_secure_data();
 	  #ifdef PROCESSING_TIME
-	  _processing_time_stop = RIMTER_NOW();
+	  _processing_time_stop = RTIMER_NOW();
 	  printf("s: %lu\n", (_processing_time_stop - _processing_time_start));
 	  #endif
 	  continue;
