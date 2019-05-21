@@ -52,6 +52,18 @@ unsigned long _processing_time_stop = 0;
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_APP
 
+#ifdef ENERGEST_CONF_ON
+#include "sys/energest.h"
+static int ctr = 0;
+
+static unsigned long
+to_seconds(uint64_t time)
+{
+  return (unsigned long)(time / ENERGEST_SECOND);
+}
+
+#endif
+
 static void res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
 /* A simple actuator example, depending on the color query parameter and post variable mode, corresponding led is activated or deactivated */
@@ -64,12 +76,34 @@ RESOURCE(res_post,
 
 static uint8_t response_payload[256]; 
 static void
+
 res_post_put_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
   #ifdef PROCESSING_TIME
   _processing_time_stop = RTIMER_NOW();
   printf("p: %lu\n", (_processing_time_stop - _processing_time_start));
   #endif
+
+  #ifdef ENERGEST_CONF_ON
+  if(ctr == 0){
+	  energest_flush();
+  } else if (ctr > 4500){
+    printf("\nEnergest:\n");
+    printf(" CPU          %4lus LPM      %4lus DEEP LPM %4lus  Total time %lus\n",
+           to_seconds(energest_type_time(ENERGEST_TYPE_CPU)),
+           to_seconds(energest_type_time(ENERGEST_TYPE_LPM)),
+           to_seconds(energest_type_time(ENERGEST_TYPE_DEEP_LPM)),
+           to_seconds(ENERGEST_GET_TOTAL_TIME()));
+    printf(" Radio LISTEN %4lus TRANSMIT %4lus OFF      %4lus\n",
+           to_seconds(energest_type_time(ENERGEST_TYPE_LISTEN)),
+           to_seconds(energest_type_time(ENERGEST_TYPE_TRANSMIT)),
+           to_seconds(ENERGEST_GET_TOTAL_TIME()
+                      - energest_type_time(ENERGEST_TYPE_TRANSMIT)
+                      - energest_type_time(ENERGEST_TYPE_LISTEN)));
+  }
+  ctr++;
+  #endif
+
   const uint8_t *payload = NULL;
   int payload_len = coap_get_payload(request, &payload);
   if( payload_len != 0 && payload != NULL) {
