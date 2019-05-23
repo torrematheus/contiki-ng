@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, Institute for Pervasive Computing, ETH Zurich
+ * Copyright (c) 2010, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,36 +26,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * This file is part of the Contiki operating system.
- */
-
-/**
- * \file
- *      Erbium (Er) example project configuration.
- * \author
- *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
  */
 
 #ifndef PROJECT_CONF_H_
 #define PROJECT_CONF_H_
 
-#define LOG_LEVEL_APP LOG_LEVEL_NONE
-
-
-#define UIP_CONF_UDP_CONNS 2
-#define UIP_CONF_BUFFER_SIZE 430
-#define REST_MAX_CHUNK_SIZE 256
-#define DTLS_MAX_BUF        256
-
 #define ENERGEST_CONF_ON 1
-//#define PROCESSING_TIME 1
-//#define STACK_USAGE 1
-//#define OSCORE_CRYPTO_TEST 1
-//#define OSCORE_PROCESS_TEST 1
-//#define OSCORE_RADIO_TEST 1
 
-//#define LOG_CONF_LEVEL_COAP LOG_LEVEL_DBG
-//#define LOG_CONF_LEVEL_DTLS LOG_LEVEL_DBG
+#ifndef WEBSERVER_CONF_CFS_CONNS
+//#define WEBSERVER_CONF_CFS_CONNS 2
+#endif
 
+#ifndef BORDER_ROUTER_CONF_WEBSERVER
+//#define BORDER_ROUTER_CONF_WEBSERVER 1
+#endif
+
+#if BORDER_ROUTER_CONF_WEBSERVER
+//#define UIP_CONF_TCP 1
+#endif
 
 #endif /* PROJECT_CONF_H_ */

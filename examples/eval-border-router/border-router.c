@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, Institute for Pervasive Computing, ETH Zurich
+ * Copyright (c) 201, RISE SICS
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,82 +27,38 @@
  * SUCH DAMAGE.
  *
  * This file is part of the Contiki operating system.
+ *
  */
 
-/**
- * \file
- *      Erbium (Er) CoAP Engine example.
- * \author
- *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
- */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "contiki.h"
+
+#ifdef ENERGEST_CONF_ON
 #include "coap-engine.h"
-
-#include "coap-keystore-simple.h"
-
-#ifdef STACK_USAGE
-#include "etimer.h"
-void set_stack();
-void read_stack();
+extern coap_resource_t res_stat;
 #endif
 
 /* Log configuration */
 #include "sys/log.h"
-#define LOG_MODULE "App"
-#define LOG_LEVEL LOG_LEVEL_APP
-/*
- * Resources to be activated need to be imported through the extern keyword.
- * The build system automatically compiles the resources in the corresponding sub-directory.
- */
-extern coap_resource_t
-#ifdef ENERGEST_CONF_ON
-res_stat,
-#endif
-res_post;
+#define LOG_MODULE "RPL BR"
+#define LOG_LEVEL LOG_LEVEL_INFO
 
-PROCESS(er_example_server, "Erbium Example Server");
-AUTOSTART_PROCESSES(&er_example_server);
+/* Declare and auto-start this file's process */
+PROCESS(contiki_ng_br, "Contiki-NG Border Router");
+AUTOSTART_PROCESSES(&contiki_ng_br);
 
-PROCESS_THREAD(er_example_server, ev, data)
+/*---------------------------------------------------------------------------*/
+PROCESS_THREAD(contiki_ng_br, ev, data)
 {
   PROCESS_BEGIN();
 
-  PROCESS_PAUSE();
-
-  LOG_INFO("Starting Erbium Example Server\n");
-  printf("COAP_DTLS_PSK_DEFAULT_KEY :  %s\n", COAP_DTLS_PSK_DEFAULT_KEY);
-  /*
-   * Bind the resources to their Uri-Path.
-   * WARNING: Activating twice only means alternate path, not two instances!
-   * All static variables are the same for each URI path.
-   */
-  coap_activate_resource(&res_post, "test/caps");
+#if BORDER_ROUTER_CONF_WEBSERVER
+  PROCESS_NAME(webserver_nogui_process);
+  process_start(&webserver_nogui_process, NULL);
+#endif /* BORDER_ROUTER_CONF_WEBSERVER */
 #ifdef ENERGEST_CONF_ON
   coap_activate_resource(&res_stat, "stat");
 #endif
-
-#ifdef STACK_USAGE
-  static struct etimer t;
-  set_stack();
-  etimer_set(&t, 5*60*CLOCK_SECOND);
-#endif
-
-
-
-  /* Define application-specific events here. */
-  while(1) {
-#ifdef STACK_USAGE
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&t));
-    read_stack();
-    etimer_reset(&t);
-#else
-    PROCESS_WAIT_EVENT();
-#endif
-  }                             /* while (1) */
+  LOG_INFO("Contiki-NG Border Router started\n");
 
   PROCESS_END();
 }

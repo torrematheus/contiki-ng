@@ -31,78 +31,43 @@
 
 /**
  * \file
- *      Erbium (Er) CoAP Engine example.
+ *      Example resource
  * \author
  *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "contiki.h"
 #include "coap-engine.h"
+#include "sys/energest.h"
+#include "stdio.h"
 
-#include "coap-keystore-simple.h"
+static void res_get_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
-#ifdef STACK_USAGE
-#include "etimer.h"
-void set_stack();
-void read_stack();
-#endif
+RESOURCE(res_stat,
+         "title=\"Hello world: ?len=0..\";rt=\"Text\"",
+         res_get_handler,
+         NULL,
+         NULL,
+         NULL);
 
-/* Log configuration */
-#include "sys/log.h"
-#define LOG_MODULE "App"
-#define LOG_LEVEL LOG_LEVEL_APP
-/*
- * Resources to be activated need to be imported through the extern keyword.
- * The build system automatically compiles the resources in the corresponding sub-directory.
- */
-extern coap_resource_t
-#ifdef ENERGEST_CONF_ON
-res_stat,
-#endif
-res_post;
-
-PROCESS(er_example_server, "Erbium Example Server");
-AUTOSTART_PROCESSES(&er_example_server);
-
-PROCESS_THREAD(er_example_server, ev, data)
+static void
+res_get_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
-  PROCESS_BEGIN();
-
-  PROCESS_PAUSE();
-
-  LOG_INFO("Starting Erbium Example Server\n");
-  printf("COAP_DTLS_PSK_DEFAULT_KEY :  %s\n", COAP_DTLS_PSK_DEFAULT_KEY);
-  /*
-   * Bind the resources to their Uri-Path.
-   * WARNING: Activating twice only means alternate path, not two instances!
-   * All static variables are the same for each URI path.
-   */
-  coap_activate_resource(&res_post, "test/caps");
-#ifdef ENERGEST_CONF_ON
-  coap_activate_resource(&res_stat, "stat");
-#endif
-
-#ifdef STACK_USAGE
-  static struct etimer t;
-  set_stack();
-  etimer_set(&t, 5*60*CLOCK_SECOND);
-#endif
+    printf("\nEnergest:\n");
+    printf(" CPU          %llu LPM      %llus DEEP LPM %llu  Total time %llu\n",
+           energest_type_time(ENERGEST_TYPE_CPU),
+           energest_type_time(ENERGEST_TYPE_LPM),
+           energest_type_time(ENERGEST_TYPE_DEEP_LPM),
+           ENERGEST_GET_TOTAL_TIME());
+    printf(" Radio LISTEN %llu TRANSMIT %llu OFF      %llu\n",
+           energest_type_time(ENERGEST_TYPE_LISTEN),
+           energest_type_time(ENERGEST_TYPE_TRANSMIT),
+           ENERGEST_GET_TOTAL_TIME()
+                      - energest_type_time(ENERGEST_TYPE_TRANSMIT)
+                      - energest_type_time(ENERGEST_TYPE_LISTEN));
 
 
 
-  /* Define application-specific events here. */
-  while(1) {
-#ifdef STACK_USAGE
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&t));
-    read_stack();
-    etimer_reset(&t);
-#else
-    PROCESS_WAIT_EVENT();
-#endif
-  }                             /* while (1) */
-
-  PROCESS_END();
+  coap_set_header_content_format(response, TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
 }

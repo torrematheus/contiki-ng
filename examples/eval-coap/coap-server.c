@@ -51,7 +51,10 @@
  * The build system automatically compiles the resources in the corresponding sub-directory.
  */
 extern coap_resource_t
-  res_post;
+#ifdef ENERGEST_CONF_ON 
+ res_stat,
+#endif
+ res_post; 
 
 #ifdef STACK_USAGE
 #include "etimer.h"
@@ -76,7 +79,7 @@ PROCESS_THREAD(er_example_server, ev, data)
    * All static variables are the same for each URI path.
    */
   coap_activate_resource(&res_post, "test/caps");
-
+  coap_activate_resource(&res_stat, "stat");
 #ifdef STACK_USAGE
   static struct etimer t;
   set_stack();
