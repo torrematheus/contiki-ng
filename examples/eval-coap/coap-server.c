@@ -72,19 +72,21 @@ PROCESS_THREAD(er_example_server, ev, data)
   PROCESS_PAUSE();
 
   LOG_INFO("Starting Erbium Example Server\n");
-
+#ifdef STACK_USAGE
+  static struct etimer t;
+  set_stack();
+  etimer_set(&t, 60*CLOCK_SECOND);
+#endif
   /*
    * Bind the resources to their Uri-Path.
    * WARNING: Activating twice only means alternate path, not two instances!
    * All static variables are the same for each URI path.
    */
   coap_activate_resource(&res_post, "test/caps");
+#ifdef ENERGEST_CONF_ON
   coap_activate_resource(&res_stat, "stat");
-#ifdef STACK_USAGE
-  static struct etimer t;
-  set_stack();
-  etimer_set(&t, 5*60*CLOCK_SECOND);
 #endif
+
 
 
   /* Define application-specific events here. */

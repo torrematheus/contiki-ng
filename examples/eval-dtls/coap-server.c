@@ -74,6 +74,11 @@ PROCESS_THREAD(er_example_server, ev, data)
   PROCESS_PAUSE();
 
   LOG_INFO("Starting Erbium Example Server\n");
+#ifdef STACK_USAGE
+  static struct etimer t;
+  set_stack();
+  etimer_set(&t, 60*CLOCK_SECOND);
+#endif
   printf("COAP_DTLS_PSK_DEFAULT_KEY :  %s\n", COAP_DTLS_PSK_DEFAULT_KEY);
   /*
    * Bind the resources to their Uri-Path.
@@ -85,11 +90,7 @@ PROCESS_THREAD(er_example_server, ev, data)
   coap_activate_resource(&res_stat, "stat");
 #endif
 
-#ifdef STACK_USAGE
-  static struct etimer t;
-  set_stack();
-  etimer_set(&t, 5*60*CLOCK_SECOND);
-#endif
+
 
 
 

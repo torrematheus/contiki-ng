@@ -77,10 +77,14 @@ PROCESS_THREAD(er_example_server, ev, data)
   PROCESS_BEGIN();
 
   PROCESS_PAUSE();
-  oscore_init_server();
   
   LOG_INFO("Starting Erbium Example Server\n");
-
+#ifdef STACK_USAGE
+  static struct etimer t;
+  set_stack(); 
+  etimer_set(&t, 60*CLOCK_SECOND);
+#endif
+  oscore_init_server();
   /*
    * Bind the resources to their Uri-Path.
    * WARNING: Activating twice only means alternate path, not two instances!
@@ -107,11 +111,7 @@ PROCESS_THREAD(er_example_server, ev, data)
 
   oscore_protect_resource(&res_post);
   
-#ifdef STACK_USAGE
-  static struct etimer t;
-  set_stack(); 
-  etimer_set(&t, 5*60*CLOCK_SECOND);
-#endif
+
 
 
   /* Define application-specific events here. */
