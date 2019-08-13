@@ -41,7 +41,7 @@
 
 //#define ENERGEST_CONF_ON 1
 //#define PROCESSING_TIME 1
-#define STACK_USAGE 1
+//#define STACK_USAGE 1
 #define LOG_LEVEL_APP LOG_LEVEL_NONE
 
 #define REST_MAX_CHUNK_SIZE 256
