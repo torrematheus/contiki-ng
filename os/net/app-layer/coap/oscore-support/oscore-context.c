@@ -107,8 +107,13 @@ bytes_equal(uint8_t *a_ptr, uint8_t a_len, uint8_t *b_ptr, uint8_t b_len)
     return 0;
   }
 }
+#ifdef WITH_GROUPCOM
+oscore_ctx_t *
+oscore_derive_ctx(uint8_t *master_secret, uint8_t master_secret_len, uint8_t *master_salt, uint8_t master_salt_len, uint8_t alg, uint8_t *sid, uint8_t sid_len, uint8_t *rid, uint8_t rid_len, uint8_t *id_context, uint8_t id_context_len, uint8_t replay_window, uint8_t *gid)
+#else
 oscore_ctx_t *
 oscore_derive_ctx(uint8_t *master_secret, uint8_t master_secret_len, uint8_t *master_salt, uint8_t master_salt_len, uint8_t alg, uint8_t *sid, uint8_t sid_len, uint8_t *rid, uint8_t rid_len, uint8_t *id_context, uint8_t id_context_len, uint8_t replay_window)
+#endif
 {
 
   oscore_ctx_t *common_ctx = memb_alloc(&common_context_memb);
@@ -149,7 +154,9 @@ oscore_derive_ctx(uint8_t *master_secret, uint8_t master_secret_len, uint8_t *ma
   common_ctx->alg = alg;
   common_ctx->id_context = id_context;
   common_ctx->id_context_len = id_context_len;
-
+#ifdef WITH_GROUPCOM 
+  common_ctx->gid = gid;
+#endif
   common_ctx->recipient_context = recipient_ctx;
   common_ctx->sender_context = sender_ctx;
 

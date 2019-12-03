@@ -165,6 +165,13 @@ oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_
   } else if( option_len > 255 || option_len < 0 || (option_value[0] & 0x06) == 6 || (option_value[0] & 0x07) == 7 || (option_value[0] & 0xE0) != 0) {
     return BAD_OPTION_4_02;
   }
+#ifdef WITH_GROUPCOM
+  /*h and k flags MUST be 1 in group OSCORE. h MUST be 1 only for requests. //TODO exclude h if client behaviour considered.*/
+  LOG_INFO("\nTime to check h and k!\n");
+  if ( (option_value[0] & 0x18) == 0) {
+    return BAD_OPTION_4_02;
+  }
+#endif
   
   uint8_t partial_iv_len = (option_value[0] & 0x07);
   uint8_t offset = 1;
@@ -184,6 +191,7 @@ oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_
     if (offset + kid_context_len > option_len) {
       return BAD_OPTION_4_02;
     }
+
     cose_encrypt0_set_kid_context(cose, &(option_value[offset]), kid_context_len);
     offset += kid_context_len;
   }
@@ -208,6 +216,7 @@ oscore_decode_message(coap_message_t *coap_pkt)
   cose_encrypt0_init(cose);
   /* Options are discarded later when they are overwritten. This should be improved */
 	  coap_status_t ret = oscore_decode_option_value(coap_pkt->object_security, coap_pkt->object_security_len, cose);
+
   if( ret != NO_ERROR){
 	 LOG_DBG_("OSCORE option value could not be parsed.\n");
 	 coap_error_message = "OSCORE option could not be parsed.";
@@ -215,6 +224,9 @@ oscore_decode_message(coap_message_t *coap_pkt)
   }
   if(coap_is_request(coap_pkt)) {
     uint8_t *key_id;
+#ifdef WITH_GROUPCOM
+    uint8_t *group_id; /*used to extract gid from OSCORE option*/
+#endif
     int key_id_len = cose_encrypt0_get_key_id(cose, &key_id);
     ctx = oscore_find_ctx_by_rid(key_id, key_id_len);
     if(ctx == NULL) {
@@ -222,6 +234,21 @@ oscore_decode_message(coap_message_t *coap_pkt)
       coap_error_message = "Security context not found";
       return UNAUTHORIZED_4_01;
     }
+#ifdef WITH_GROUPCOM
+    uint8_t gid_len = cose_encrypt0_get_kid_context(cose, &group_id);
+    if(gid_len == 0) {
+      LOG_DBG_("Gid length is 0.\n");
+      return UNAUTHORIZED_4_01;
+    } 
+    else if (*(ctx->gid) != *(group_id)) {
+      LOG_DBG_("Received gid does not match.\n");    
+      return UNAUTHORIZED_4_01;
+    }
+    else {
+      LOG_DBG_("Gid length=%d.\n", gid_len);
+      printf_hex(group_id, gid_len);
+    }
+#endif    
     /*4 Verify the ‘Partial IV’ parameter using the Replay Window, as described in Section 7.4. */
     if(!oscore_validate_sender_seq(ctx->recipient_context, cose)) {
       LOG_DBG_("OSCORE Replayed or old message\n");
