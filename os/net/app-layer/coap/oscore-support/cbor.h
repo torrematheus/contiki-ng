@@ -54,4 +54,6 @@ int cbor_put_map(uint8_t **buffer, uint8_t elements);
 
 int cbor_put_unsigned(uint8_t **buffer, uint8_t value);
 
+int cbor_put_negative(uint8_t **buffer, int64_t value);
+
 #endif /* _cbor_H */

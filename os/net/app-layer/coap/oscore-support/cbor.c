@@ -138,3 +138,14 @@ cbor_put_unsigned(uint8_t **buffer, uint8_t value)
   (*buffer)++;
   return 1;
 }
+
+int
+cbor_put_negative(uint8_t **buffer, int64_t value)
+{
+  value--;
+  uint8_t *pt = *buffer;
+  int nb = cbor_put_unsigned(buffer, value);
+  *pt = (*pt | 0x20);
+  return nb;
+}
+
