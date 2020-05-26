@@ -140,7 +140,7 @@ void TSCH_CALLBACK_NEW_TIME_SOURCE(const struct tsch_neighbor *old, const struct
 
 /* Called by TSCH every time a packet is ready to be added to the send queue */
 #ifdef TSCH_CALLBACK_PACKET_READY
-void TSCH_CALLBACK_PACKET_READY(void);
+int TSCH_CALLBACK_PACKET_READY(void);
 #endif
 
 /***** External Variables *****/
@@ -161,15 +161,16 @@ extern const linkaddr_t tsch_eb_address;
 extern struct tsch_asn_t tsch_current_asn;
 extern uint8_t tsch_join_priority;
 extern struct tsch_link *current_link;
-/* If we are inside a slot, this tells the current channel */
+/* If we are inside a slot, these tell the current channel and channel offset */
 extern uint8_t tsch_current_channel;
+extern uint8_t tsch_current_channel_offset;
 /* TSCH channel hopping sequence */
 extern uint8_t tsch_hopping_sequence[TSCH_HOPPING_SEQUENCE_MAX_LEN];
 extern struct tsch_asn_divisor_t tsch_hopping_sequence_length;
 /* TSCH timeslot timing (in micro-second) */
-extern uint16_t tsch_timing_us[tsch_ts_elements_count];
+extern tsch_timeslot_timing_usec tsch_timing_us;
 /* TSCH timeslot timing (in rtimer ticks) */
-extern rtimer_clock_t tsch_timing[tsch_ts_elements_count];
+extern tsch_timeslot_timing_ticks tsch_timing;
 /* Statistics on the current session */
 extern unsigned long tx_count;
 extern unsigned long rx_count;
@@ -177,7 +178,7 @@ extern unsigned long sync_count;
 extern int32_t min_drift_seen;
 extern int32_t max_drift_seen;
 /* The TSCH standard 10ms timeslot timing */
-extern const uint16_t tsch_timeslot_timing_us_10000[tsch_ts_elements_count];
+extern const tsch_timeslot_timing_usec tsch_timeslot_timing_us_10000;
 
 /* TSCH processes */
 PROCESS_NAME(tsch_process);
@@ -198,6 +199,11 @@ void tsch_set_join_priority(uint8_t jp);
  * not be set to exceed TSCH_MAX_EB_PERIOD. Set to 0 to stop sending EBs.
  * Actual transmissions are jittered, spaced by a random number within
  * [period*0.75, period[
+ * If RPL is used, the period will be automatically reset by RPL
+ * equal to the DIO period whenever the DIO period changes.
+ * Hence, calling `tsch_set_eb_period(0)` is NOT sufficient to disable sending EB!
+ * To do that, either configure the node in RPL leaf mode, or
+ * use static config for TSCH (`define TSCH_CONF_EB_PERIOD 0`).
  *
  * \param period The period in Clock ticks.
  */
@@ -205,8 +211,8 @@ void tsch_set_eb_period(uint32_t period);
 /**
  * Set the desynchronization timeout after which a node sends a unicasst
  * keep-alive (KA) to its time source. Set to 0 to stop sending KAs. The
- * actual timeout is a random number within
- * [timeout*0.9, timeout[
+ * actual timeout is a random number within [timeout*0.9, timeout[
+ * Can be called from an interrupt.
  *
  * \param timeout The timeout in Clock ticks.
  */
@@ -228,13 +234,12 @@ void tsch_set_coordinator(int enable);
 void tsch_set_pan_secured(int enable);
 /**
   * Schedule a keep-alive transmission within [timeout*0.9, timeout[
+  * Can be called from an interrupt.
   * @see tsch_set_ka_timeout
+  *
+  * \param immediate send immediately when 1, schedule using current timeout when 0
   */
-void tsch_schedule_keepalive(void);
-/**
-  * Schedule a keep-alive immediately
-  */
-void tsch_schedule_keepalive_immediately(void);
+void tsch_schedule_keepalive(int immediate);
 /**
   * Get the time, in clock ticks, since the TSCH network was started.
   *

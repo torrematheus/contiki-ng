@@ -43,6 +43,7 @@
 #define UIP_DS6_H_
 
 #include "net/ipv6/uip.h"
+#include "net/ipv6/multicast/uip-mcast6.h"
 #include "sys/stimer.h"
 /* The size of uip_ds6_addr_t depends on UIP_ND6_DEF_MAXDADNS. Include uip-nd6.h to define it. */
 #include "net/ipv6/uip-nd6.h"
@@ -165,7 +166,7 @@
 /** \brief General DS6 definitions */
 /** Period for uip-ds6 periodic task*/
 #ifndef UIP_DS6_CONF_PERIOD
-#define UIP_DS6_PERIOD   (CLOCK_SECOND/10)
+#define UIP_DS6_PERIOD   (60 * CLOCK_SECOND)
 #else
 #define UIP_DS6_PERIOD UIP_DS6_CONF_PERIOD
 #endif

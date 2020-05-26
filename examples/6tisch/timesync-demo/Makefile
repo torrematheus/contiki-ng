@@ -3,7 +3,7 @@ all: $(CONTIKI_PROJECT)
 
 CONTIKI=../../..
 
-PLATFORMS_EXCLUDE = sky z1 nrf52dk native
+PLATFORMS_EXCLUDE = sky nrf52dk native
 
 # force Orchestra from command line
 MAKE_WITH_ORCHESTRA ?= 0
@@ -11,10 +11,12 @@ MAKE_WITH_ORCHESTRA ?= 0
 MAKE_WITH_SECURITY ?= 0
 
 MAKE_MAC = MAKE_MAC_TSCH
-MODULES += os/services/shell
+
+include $(CONTIKI)/Makefile.dir-variables
+MODULES += $(CONTIKI_NG_SERVICES_DIR)/shell
 
 ifeq ($(MAKE_WITH_ORCHESTRA),1)
-MODULES += os/services/orchestra
+MODULES += $(CONTIKI_NG_SERVICES_DIR)/orchestra
 endif
 
 ifeq ($(MAKE_WITH_SECURITY),1)

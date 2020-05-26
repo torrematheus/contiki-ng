@@ -117,7 +117,7 @@ rpl_neighbor_snprint(char *buf, int buflen, rpl_nbr_t *nbr)
   if(index >= buflen) {
     return index;
   }
-  if(stats->last_tx_time > 0) {
+  if(stats != NULL && stats->last_tx_time > 0) {
     index += snprintf(buf+index, buflen-index,
                               " (last tx %u min ago",
                               (unsigned)((clock_now - stats->last_tx_time) / (60 * CLOCK_SECOND)));
@@ -196,9 +196,12 @@ remove_neighbor(rpl_nbr_t *nbr)
   /* Make sure we don't point to a removed neighbor. Note that we do not need
   to worry about preferred_parent here, as it is locked in the the table
   and will never be removed by external modules. */
+#if RPL_WITH_PROBING
   if(nbr == curr_instance.dag.urgent_probing_target) {
     curr_instance.dag.urgent_probing_target = NULL;
   }
+#endif
+
   if(nbr == curr_instance.dag.unicast_dio_target) {
     curr_instance.dag.unicast_dio_target = NULL;
   }
@@ -314,10 +317,11 @@ rpl_neighbor_set_preferred_parent(rpl_nbr_t *nbr)
     uip_ds6_defrt_add(rpl_neighbor_get_ipaddr(nbr), 0);
 
     curr_instance.dag.preferred_parent = nbr;
+    curr_instance.dag.unprocessed_parent_switch = true;
   }
 }
 /*---------------------------------------------------------------------------*/
-/* Remove DAG neighbors with a rank that is at least the same as minimum_rank. */
+/* Remove all DAG neighbors */
 void
 rpl_neighbor_remove_all(void)
 {
@@ -325,14 +329,19 @@ rpl_neighbor_remove_all(void)
 
   LOG_INFO("removing all neighbors\n");
 
+  /* Unset preferred parent before we de-allocate it. This will set
+   * unprocessed_parent_switch which will make sure rpl_dag_update_state takes
+   * all actions necessary after losing the preferred parent */
+  rpl_neighbor_set_preferred_parent(NULL);
+
   nbr = nbr_table_head(rpl_neighbors);
   while(nbr != NULL) {
     remove_neighbor(nbr);
     nbr = nbr_table_next(rpl_neighbors, nbr);
   }
 
-  /* Update needed immediately so as to ensure preferred_parent becomes NULL,
-   * and no longer points to a de-allocated neighbor. */
+  /* Update needed immediately. As we have lost the preferred parent this will
+   * enter poisoining and set timers accordingly. */
   rpl_dag_update_state();
 }
 /*---------------------------------------------------------------------------*/
@@ -357,8 +366,9 @@ best_parent(int fresh_only)
   /* Search for the best parent according to the OF */
   for(nbr = nbr_table_head(rpl_neighbors); nbr != NULL; nbr = nbr_table_next(rpl_neighbors, nbr)) {
 
-    if(!acceptable_rank(nbr->rank) || !curr_instance.of->nbr_is_acceptable_parent(nbr)) {
-      /* Exclude neighbors with a rank that is not acceptable) */
+    if(!acceptable_rank(rpl_neighbor_rank_via_nbr(nbr))
+      || !curr_instance.of->nbr_is_acceptable_parent(nbr)) {
+      /* Exclude neighbors with a rank that is not acceptable */
       continue;
     }
 

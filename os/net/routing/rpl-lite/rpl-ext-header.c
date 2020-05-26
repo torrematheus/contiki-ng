@@ -123,6 +123,11 @@ rpl_ext_header_srh_update(void)
   /* Update SRH in-place */
   if(segments_left == 0) {
     /* We are the final destination, do nothing */
+  } else if(segments_left > path_len) {
+    /* Discard the packet because of a parameter problem. */
+    LOG_ERR("SRH with too many segments left (%u > %u)\n",
+            segments_left, path_len);
+    return 0;
   } else {
     uint8_t i = path_len - segments_left; /* The index of the next address to be visited */
     uint8_t *addr_ptr = ((uint8_t *)rh_header) + RPL_RH_LEN + RPL_SRH_LEN + (i * (16 - cmpri));
@@ -453,37 +458,59 @@ rpl_ext_header_update(void)
   }
 }
 /*---------------------------------------------------------------------------*/
-void
+bool
 rpl_ext_header_remove(void)
 {
   uint8_t *prev_proto_ptr;
   uint8_t protocol;
-  uint8_t ext_len;
+  uint16_t ext_len;
   uint8_t *next_header;
   struct uip_ext_hdr *ext_ptr;
   struct uip_ext_hdr_opt *opt_ptr;
 
   next_header = uipbuf_get_next_header(uip_buf, uip_len, &protocol, true);
+  if(next_header == NULL) {
+    return true;
+  }
   ext_ptr = (struct uip_ext_hdr *)next_header;
   prev_proto_ptr = &UIP_IP_BUF->proto;
-  while(next_header != NULL && uip_is_proto_ext_hdr(protocol)) {
+
+  while(uip_is_proto_ext_hdr(protocol)) {
     opt_ptr = (struct uip_ext_hdr_opt *)(next_header + 2);
-    if(protocol == UIP_PROTO_ROUTING || (protocol == UIP_PROTO_HBHO && opt_ptr->type == UIP_EXT_HDR_OPT_RPL)) {
+    if(protocol == UIP_PROTO_ROUTING ||
+       (protocol == UIP_PROTO_HBHO && opt_ptr->type == UIP_EXT_HDR_OPT_RPL)) {
       /* Remove ext header */
       *prev_proto_ptr = ext_ptr->next;
       ext_len = ext_ptr->len * 8 + 8;
-      uipbuf_add_ext_hdr(-ext_len);
+      if(uipbuf_add_ext_hdr(-ext_len) == false) {
+        return false;
+      }
+
       /* Update length field and move rest of packet to the "left" */
       uipbuf_set_len_field(UIP_IP_BUF, uip_len - UIP_IPH_LEN);
-      memmove(next_header, next_header + ext_len, uip_len - (next_header - uip_buf));
+      if(uip_len <= next_header - uip_buf) {
+        /* No more data to move. */
+        return false;
+      }
+      memmove(next_header, next_header + ext_len,
+              uip_len - (next_header - uip_buf));
+
       /* Update loop variables */
       protocol = *prev_proto_ptr;
     } else {
       /* move to the ext hdr */
-      next_header = uipbuf_get_next_header(next_header, uip_len - (next_header - uip_buf), &protocol, false);
+      next_header = uipbuf_get_next_header(next_header,
+                                           uip_len - (next_header - uip_buf),
+                                           &protocol, false);
+      if(next_header == NULL) {
+        /* Processing finished. */
+        break;
+      }
       ext_ptr = (struct uip_ext_hdr *)next_header;
       prev_proto_ptr = &ext_ptr->next;
     }
   }
+
+  return true;
 }
 /** @}*/
