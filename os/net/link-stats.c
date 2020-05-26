@@ -144,6 +144,11 @@ link_stats_packet_sent(const linkaddr_t *lladdr, int status, int numtx)
 
   stats = nbr_table_get_from_lladdr(link_stats, lladdr);
   if(stats == NULL) {
+    /* If transmission failed, do not add the neighbor, as the neighbor might not exist anymore */
+    if(status != MAC_TX_OK) {
+      return;
+    }
+
     /* Add the neighbor */
     stats = nbr_table_add_lladdr(link_stats, lladdr, NBR_TABLE_REASON_LINK_STATS, NULL);
     if(stats != NULL) {
@@ -225,6 +230,9 @@ link_stats_input_callback(const linkaddr_t *lladdr)
 #else /* LINK_STATS_INIT_ETX_FROM_RSSI */
       stats->etx = ETX_DEFAULT * ETX_DIVISOR;
 #endif /* LINK_STATS_INIT_ETX_FROM_RSSI */
+#if LINK_STATS_PACKET_COUNTERS
+      stats->cnt_current.num_packets_rx = 1;
+#endif
     }
     return;
   }

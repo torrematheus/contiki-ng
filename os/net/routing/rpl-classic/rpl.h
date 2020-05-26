@@ -277,7 +277,7 @@ rpl_instance_t *rpl_get_instance(uint8_t instance_id);
 int rpl_ext_header_update(void);
 int rpl_ext_header_hbh_update(uint8_t *, int);
 void rpl_insert_header(void);
-void rpl_ext_header_remove(void);
+bool rpl_ext_header_remove(void);
 const struct link_stats *rpl_get_parent_link_stats(rpl_parent_t *p);
 int rpl_parent_is_fresh(rpl_parent_t *p);
 int rpl_parent_is_reachable(rpl_parent_t *p);
@@ -340,6 +340,13 @@ int rpl_has_joined(void);
  * \retval 1 if we have a downward route from RPL Root, 0 if not.
  */
 int rpl_has_downward_route(void);
+
+/**
+ * Tells whether the protocol is in leaf mode
+ *
+ * \retval 1 if the protocol is in leaf mode, 0 if not.
+ */
+uint8_t rpl_is_in_leaf_mode(void);
 
 /*---------------------------------------------------------------------------*/
 #endif /* RPL_H */

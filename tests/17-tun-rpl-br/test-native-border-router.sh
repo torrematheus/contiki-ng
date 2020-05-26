@@ -21,6 +21,8 @@ PING_DELAY=${6:-1}
 
 # ICMP request-reply count
 COUNT=5
+# Test OK of COUNT_TARGET ok out of COUNT
+COUNT_TARGET=3
 
 # Start simulation
 echo "Starting Cooja simulation $BASENAME.csc"
@@ -30,7 +32,7 @@ sleep 20
 
 # Connect to the simulation
 echo "Starting native border-router"
-nohup make -C $CONTIKI/examples/rpl-border-router/ connect-router-cooja TARGET=native >> $BASENAME.nbr.log 2>&1 &
+nohup make -C $CONTIKI/examples/rpl-border-router/ -B connect-router-cooja TARGET=native >> $BASENAME.nbr.log 2>&1 &
 MPID=$!
 printf "Waiting for network formation (%d seconds)\n" "$WAIT_TIME"
 sleep $WAIT_TIME
@@ -50,7 +52,7 @@ sleep 1
 rm COOJA.testlog
 rm COOJA.log
 
-if [ $STATUS -eq 0 ] && [ $REPLIES -eq $COUNT ] ; then
+if [ $STATUS -eq 0 ] && [ $REPLIES -ge $COUNT_TARGET ] ; then
   printf "%-32s TEST OK\n" "$BASENAME" | tee $BASENAME.testlog;
 else
   echo "==== $BASENAME.coojalog ====" ; cat $BASENAME.coojalog;
