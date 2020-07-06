@@ -44,69 +44,80 @@
 #include "coap.h"
 #include "stdio.h"
 #include "inttypes.h"
-/* Log configuration */
-#include "coap-log.h"
-#define LOG_MODULE "coap"
-#define LOG_LEVEL  LOG_LEVEL_COAP
+#include "assert.h"
 
-void
-printf_hex(unsigned char *data, unsigned int len)
+/* Log configuration */
+#include "sys/log.h"
+#define LOG_MODULE "oscore"
+#ifdef LOG_CONF_LEVEL_OSCORE
+#define LOG_LEVEL LOG_CONF_LEVEL_OSCORE
+#else
+#define LOG_LEVEL LOG_LEVEL_WARN
+#endif
+
+/* Sets Alg, Partial IV Key ID and Key in COSE. */
+static void oscore_populate_cose(coap_message_t *pkt, cose_encrypt0_t *cose, oscore_ctx_t *ctx, bool sending, uint8_t partial_iv_buffer[8]);
+
+static void
+printf_hex(const uint8_t *data, size_t len)
 {
-  unsigned int i = 0;
-  for(i = 0; i < len; i++) {
-    LOG_DBG_("%02x ", data[i]);
+  for(size_t i = 0; i < len; i++) {
+    LOG_ERR_("%02x", data[i]);
+  }
+}
+static void
+printf_hex_detailed(const char* name, const uint8_t *data, size_t len)
+{
+  LOG_DBG("%s (len=%u): ", name, len);
+  for(size_t i = 0; i < len; i++) {
+    LOG_DBG_("%02x", data[i]);
   }
   LOG_DBG_("\n");
 }
-uint8_t
-coap_is_request(coap_message_t *coap_pkt)
+
+static bool
+coap_is_request(const coap_message_t *coap_pkt)
 {
-  if(coap_pkt->code >= COAP_GET && coap_pkt->code <= COAP_DELETE) {
-    return 1;
-  } else {
-    return 0;
-  }
+  return coap_pkt->code >= COAP_GET && coap_pkt->code <= COAP_DELETE;
 }
-uint8_t
-oscore_protected_request(void *request)
+bool
+oscore_protected_request(const coap_message_t *request)
 {
-  if(request != NULL) {
-    coap_message_t *coap_pkt = (coap_message_t *)request;
-    if(coap_is_option(coap_pkt, COAP_OPTION_OSCORE)) {
-      return 1;
-    }
-  }
-  return 0;
+  return request != NULL && coap_is_option(request, COAP_OPTION_OSCORE);
 }
 void
 oscore_protect_resource(coap_resource_t *resource)
 {
   resource->oscore_protected = 1;
 }
-uint8_t
+bool oscore_is_resource_protected(const coap_resource_t *resource)
+{
+  return resource->oscore_protected;
+}
+static uint8_t
 u64tob(uint64_t value, uint8_t *buffer)
 {
   memset(buffer, 0, 8);
   uint8_t length = 0;
-  for( int i = 0; i < 8; i++){
-        uint8_t temp = (value >> (8*i)) & 0xFF;
+  for(int i = 0; i < 8; i++){
+    uint8_t temp = (value >> (8*i)) & 0xFF;
 
-        if( temp != 0){
-                length = i+1;
-        }
+    if(temp != 0){
+      length = i+1;
+    }
   }
 
-  for ( int i = 0; i < length; i++){
-          buffer[length - i -1] = (value >> (8*i)) & 0xFF;
+  for (int i = 0; i < length; i++){
+    buffer[length - i - 1] = (value >> (8*i)) & 0xFF;
   }  
   return length == 0 ? 1 : length;
 
 }
-uint64_t
+static uint64_t
 btou64(uint8_t *bytes, size_t len)
 {
   uint8_t buffer[8];
-  memset(buffer, 0, 8); /* function variables are not initializated to anything */
+  memset(buffer, 0, sizeof(buffer)); /* function variables are not initializated to anything */
   int offset = 8 - len;
   uint64_t num;
 
@@ -124,8 +135,8 @@ btou64(uint8_t *bytes, size_t len)
 
   return num;
 }
-int
-oscore_encode_option_value(uint8_t *option_buffer, cose_encrypt0_t *cose, uint8_t include_partial_iv)
+static int
+oscore_encode_option_value(uint8_t *option_buffer, cose_encrypt0_t *cose, bool include_partial_iv)
 {
   uint8_t offset = 1;
   if(cose->partial_iv_len > 5){
@@ -159,9 +170,8 @@ oscore_encode_option_value(uint8_t *option_buffer, cose_encrypt0_t *cose, uint8_
 coap_status_t
 oscore_decode_option_value(uint8_t *option_value, int option_len, cose_encrypt0_t *cose)
 {
-  
   if(option_len == 0){
-        return NO_ERROR;
+    return NO_ERROR;
   } else if( option_len > 255 || option_len < 0 || (option_value[0] & 0x06) == 6 || (option_value[0] & 0x07) == 7 || (option_value[0] & 0xE0) != 0) {
     return BAD_OPTION_4_02;
   }
@@ -205,61 +215,73 @@ oscore_decode_message(coap_message_t *coap_pkt)
   oscore_ctx_t *ctx = NULL;
   uint8_t aad_buffer[35];
   uint8_t nonce_buffer[COSE_algorithm_AES_CCM_16_64_128_IV_LEN];
+  uint8_t seq_buffer[8];
+  uint8_t partial_iv_buffer[8];
   cose_encrypt0_init(cose);
+
+  printf_hex_detailed("object_security", coap_pkt->object_security, coap_pkt->object_security_len);
+
   /* Options are discarded later when they are overwritten. This should be improved */
-	  coap_status_t ret = oscore_decode_option_value(coap_pkt->object_security, coap_pkt->object_security_len, cose);
-  if( ret != NO_ERROR){
-	 LOG_DBG_("OSCORE option value could not be parsed.\n");
-	 coap_error_message = "OSCORE option could not be parsed.";
-	 return ret;
+  coap_status_t ret = oscore_decode_option_value(coap_pkt->object_security, coap_pkt->object_security_len, cose);
+  if(ret != NO_ERROR){
+    LOG_ERR("OSCORE option value could not be parsed.\n");
+    coap_error_message = "OSCORE option could not be parsed.";
+    return ret;
   }
   if(coap_is_request(coap_pkt)) {
-    uint8_t *key_id;
-    int key_id_len = cose_encrypt0_get_key_id(cose, &key_id);
+    const uint8_t *key_id;
+    uint8_t key_id_len = cose_encrypt0_get_key_id(cose, &key_id);
     ctx = oscore_find_ctx_by_rid(key_id, key_id_len);
     if(ctx == NULL) {
-      LOG_DBG_("OSCORE Security Context not found.\n");
+      LOG_ERR("OSCORE Security Context not found (rid = '");
+      printf_hex(key_id, key_id_len);
+      LOG_ERR_("' len=%u).\n", key_id_len);
       coap_error_message = "Security context not found";
-      return UNAUTHORIZED_4_01;
+      return OSCORE_MISSING_CONTEXT; /* Will transform into UNAUTHORIZED_4_01 later */
     }
     /*4 Verify the ‘Partial IV’ parameter using the Replay Window, as described in Section 7.4. */
-    if(!oscore_validate_sender_seq(ctx->recipient_context, cose)) {
-      LOG_DBG_("OSCORE Replayed or old message\n");
+    if(!oscore_validate_sender_seq(&ctx->recipient_context, cose)) {
+      LOG_WARN("OSCORE Replayed or old message\n");
       coap_error_message = "Replay detected";
       return UNAUTHORIZED_4_01;
     }
-    cose_encrypt0_set_key(cose, ctx->recipient_context->recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+    cose_encrypt0_set_key(cose, ctx->recipient_context.recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
   } else { /* Message is a response */
     uint64_t seq;
-    uint8_t seq_buffer[8];
-    ctx = oscore_get_exchange(coap_pkt->token, coap_pkt->token_len, &seq);
+    ctx = oscore_get_contex_from_exchange(coap_pkt->token, coap_pkt->token_len, &seq);
+    oscore_remove_exchange(coap_pkt->token, coap_pkt->token_len);
     if(ctx == NULL) {
-      LOG_DBG_("OSCORE Security Context not found.\n");
+      LOG_ERR("OSCORE Security Context not found (token = '");
+      printf_hex(coap_pkt->token, coap_pkt->token_len);
+      LOG_ERR_("' len=%u).\n", coap_pkt->token_len);
       coap_error_message = "Security context not found";
-      return UNAUTHORIZED_4_01;
+      return OSCORE_MISSING_CONTEXT; /* Will transform into UNAUTHORIZED_4_01 later */
     }
     /* If message contains a partial IV, the received is used. */
     if(cose->partial_iv_len == 0){
+      LOG_DBG("cose->partial_iv_len == 0 (%"PRIu64")\n", seq);
       uint8_t seq_len = u64tob(seq, seq_buffer);
       cose_encrypt0_set_partial_iv(cose, seq_buffer, seq_len);
+    } else {
+      LOG_DBG("cose->partial_iv_len == %"PRIu16" (%"PRIu64")\n", cose->partial_iv_len, seq);
     }
   }
-  oscore_populate_cose(coap_pkt, cose, ctx, 0);  
+  oscore_populate_cose(coap_pkt, cose, ctx, false, partial_iv_buffer);
   coap_pkt->security_context = ctx;
 
-  size_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, 0);
+  size_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, false);
   cose_encrypt0_set_aad(cose, aad_buffer, aad_len);
   cose_encrypt0_set_alg(cose, ctx->alg);
   
-  oscore_generate_nonce(cose, coap_pkt, nonce_buffer, 13);
-  cose_encrypt0_set_nonce(cose, nonce_buffer, 13);
+  oscore_generate_nonce(cose, coap_pkt, nonce_buffer, sizeof(nonce_buffer));
+  cose_encrypt0_set_nonce(cose, nonce_buffer, sizeof(nonce_buffer));
   
   cose_encrypt0_set_content(cose, coap_pkt->payload, coap_pkt->payload_len);
   int res = cose_encrypt0_decrypt(cose);
   if(res <= 0) {
-    LOG_DBG_("OSCORE Decryption Failure, result code: %d\n", res);
+    LOG_ERR("OSCORE Decryption Failure, result code: %d\n", res);
     if(coap_is_request(coap_pkt)) {
-      oscore_roll_back_seq(ctx->recipient_context);
+      oscore_roll_back_seq(&ctx->recipient_context);
       coap_error_message = "Decryption failure";
       return BAD_REQUEST_4_00;
     } else {
@@ -268,43 +290,39 @@ oscore_decode_message(coap_message_t *coap_pkt)
     }  
   }
 
-  coap_status_t status = oscore_parser(coap_pkt, cose->content, res, ROLE_CONFIDENTIAL);
-  return status;
+  return oscore_parser(coap_pkt, cose->content, res, ROLE_CONFIDENTIAL);
 }
 
-uint8_t
-oscore_populate_cose(coap_message_t *pkt, cose_encrypt0_t *cose, oscore_ctx_t *ctx, uint8_t sending)
+static void
+oscore_populate_cose(coap_message_t *pkt, cose_encrypt0_t *cose, oscore_ctx_t *ctx, bool sending, uint8_t partial_iv_buffer[8])
 {
   cose_encrypt0_set_alg(cose, ctx->alg);
 
-  uint8_t partial_iv_buffer[8];
   uint8_t partial_iv_len;
 
   if(coap_is_request(pkt)) {
     if(sending){
-      partial_iv_len = u64tob(ctx->sender_context->seq, partial_iv_buffer);
+      partial_iv_len = u64tob(ctx->sender_context.seq, partial_iv_buffer);
       cose_encrypt0_set_partial_iv(cose, partial_iv_buffer, partial_iv_len);
-      cose_encrypt0_set_key_id(cose, ctx->sender_context->sender_id, ctx->sender_context->sender_id_len);
-      cose_encrypt0_set_key(cose, ctx->sender_context->sender_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+      cose_encrypt0_set_key_id(cose, ctx->sender_context.sender_id, ctx->sender_context.sender_id_len);
+      cose_encrypt0_set_key(cose, ctx->sender_context.sender_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
     } else { /* receiving */
-      /* Partial IV set by decode option value. */
-      /* Key ID set by decode option value. */	  
-      cose_encrypt0_set_key(cose, ctx->recipient_context->recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+      assert(cose->partial_iv_len > 0); /* Partial IV set by decode option value. */
+      assert(cose->key_id != NULL); /* Key ID set by decode option value. */
+      cose_encrypt0_set_key(cose, ctx->recipient_context.recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
     }
   } else { /* coap is response */
     if(sending){
-      partial_iv_len = u64tob(ctx->recipient_context->recent_seq, partial_iv_buffer);
+      partial_iv_len = u64tob(ctx->recipient_context.recent_seq, partial_iv_buffer);
       cose_encrypt0_set_partial_iv(cose, partial_iv_buffer, partial_iv_len);
-      cose_encrypt0_set_key_id(cose, ctx->recipient_context->recipient_id, ctx->recipient_context->recipient_id_len);
-      cose_encrypt0_set_key(cose, ctx->sender_context->sender_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+      cose_encrypt0_set_key_id(cose, ctx->recipient_context.recipient_id, ctx->recipient_context.recipient_id_len);
+      cose_encrypt0_set_key(cose, ctx->sender_context.sender_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
     } else { /* receiving */
-      /* Partial IV set when getting seq from exchange. */
-      cose_encrypt0_set_key_id(cose, ctx->sender_context->sender_id, ctx->sender_context->sender_id_len);
-      cose_encrypt0_set_key(cose, ctx->recipient_context->recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+      assert(cose->partial_iv_len > 0); /* Partial IV set when getting seq from exchange. */
+      cose_encrypt0_set_key_id(cose, ctx->sender_context.sender_id, ctx->sender_context.sender_id_len);
+      cose_encrypt0_set_key(cose, ctx->recipient_context.recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
     }
   }
-
-  return 0;
 }
 
 /* Prepares a new OSCORE message, returns the size of the message. */
@@ -317,48 +335,45 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
   uint8_t aad_buffer[35];
   uint8_t nonce_buffer[COSE_algorithm_AES_CCM_16_64_128_IV_LEN];
   uint8_t option_value_buffer[15];
-/*  1 Retrieve the Sender Context associated with the target resource. */
+  uint8_t partial_iv_buffer[8];
+  /*  1 Retrieve the Sender Context associated with the target resource. */
   oscore_ctx_t *ctx = coap_pkt->security_context;
   if(ctx == NULL) {
-    LOG_DBG_("No context in OSCORE!\n");
+    LOG_ERR("No context in OSCORE!\n");
     return PACKET_SERIALIZATION_ERROR;
   }
-  oscore_populate_cose(coap_pkt, cose, coap_pkt->security_context, 1);
+  oscore_populate_cose(coap_pkt, cose, coap_pkt->security_context, true, partial_iv_buffer);
 
   uint8_t plaintext_len = oscore_serializer(coap_pkt, content_buffer, ROLE_CONFIDENTIAL);
-  if( plaintext_len > COAP_MAX_CHUNK_SIZE){
-    LOG_DBG_("OSCORE Message to large to process.\n");
+  if(plaintext_len > COAP_MAX_CHUNK_SIZE){
+    LOG_ERR("OSCORE Message to large to process.\n");
     return PACKET_SERIALIZATION_ERROR;
   }
 
   cose_encrypt0_set_content(cose, content_buffer, plaintext_len);
   
-  uint8_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, 1);
+  uint8_t aad_len = oscore_prepare_aad(coap_pkt, cose, aad_buffer, true);
   cose_encrypt0_set_aad(cose, aad_buffer, aad_len);
   
   oscore_generate_nonce(cose, coap_pkt, nonce_buffer, COSE_algorithm_AES_CCM_16_64_128_IV_LEN);
   cose_encrypt0_set_nonce(cose, nonce_buffer, COSE_algorithm_AES_CCM_16_64_128_IV_LEN);
   
-  if(coap_is_request(coap_pkt)){
-    if(!oscore_set_exchange(coap_pkt->token, coap_pkt->token_len, ctx->sender_context->seq, ctx)){
-	LOG_DBG_("OSCORE Could not store exchange.\n");
-    	return PACKET_SERIALIZATION_ERROR;
+  if(coap_is_request(coap_pkt)) {
+    if(!oscore_set_exchange(coap_pkt->token, coap_pkt->token_len, ctx->sender_context.seq, ctx)) {
+      LOG_ERR("OSCORE Could not store exchange.\n");
+      return PACKET_SERIALIZATION_ERROR;
     }
     oscore_increment_sender_seq(ctx);
   }
   int ciphertext_len = cose_encrypt0_encrypt(cose);
-  if( ciphertext_len < 0){
-    LOG_DBG_("OSCORE internal error %d.\n", ciphertext_len);
+  if(ciphertext_len < 0){
+    LOG_ERR("OSCORE internal error %d.\n", ciphertext_len);
     return PACKET_SERIALIZATION_ERROR;
   }
   
-  uint8_t option_value_len = 0;
-  if(coap_is_request(coap_pkt)){
-	option_value_len = oscore_encode_option_value(option_value_buffer, cose, 1);
-  } else { //Partial IV shall NOT be included in responses
-	option_value_len = oscore_encode_option_value(option_value_buffer, cose, 0);
-  }
-
+  // Partial IV shall NOT be included in responses if not a request
+  const bool include_partial_iv = coap_is_request(coap_pkt);
+  uint8_t option_value_len = oscore_encode_option_value(option_value_buffer, cose, include_partial_iv);
   
   coap_set_payload(coap_pkt, content_buffer, ciphertext_len);
   coap_set_header_object_security(coap_pkt, option_value_buffer, option_value_len);
@@ -376,7 +391,7 @@ oscore_prepare_message(coap_message_t *coap_pkt, uint8_t *buffer)
 }
 /* Creates and sets External AAD */
 size_t
-oscore_prepare_aad(coap_message_t *coap_pkt, cose_encrypt0_t *cose, uint8_t *buffer, uint8_t sending)
+oscore_prepare_aad(coap_message_t *coap_pkt, cose_encrypt0_t *cose, uint8_t *buffer, bool sending)
 {
   uint8_t external_aad_buffer[25];
   uint8_t *external_aad_ptr = external_aad_buffer;
@@ -384,32 +399,45 @@ oscore_prepare_aad(coap_message_t *coap_pkt, cose_encrypt0_t *cose, uint8_t *buf
   /* Serialize the External AAD*/
   external_aad_len += cbor_put_array(&external_aad_ptr, 5);
   external_aad_len += cbor_put_unsigned(&external_aad_ptr, 1); /* Version, always for this version of the draft 1 */
-  external_aad_len += cbor_put_array(&external_aad_ptr, 1); /* Algoritms array */
-  external_aad_len += cbor_put_unsigned(&external_aad_ptr, (coap_pkt->security_context->alg)); /* Algorithm */
+  external_aad_len += cbor_put_array(&external_aad_ptr, 1); /* Algorithms array */
+  external_aad_len += cbor_put_unsigned(&external_aad_ptr, coap_pkt->security_context->alg); /* Algorithm */
   /*When sending responses. */
-  if( !coap_is_request(coap_pkt)) { 
-    external_aad_len += cbor_put_bytes(&external_aad_ptr, coap_pkt->security_context->recipient_context->recipient_id,  coap_pkt->security_context->recipient_context->recipient_id_len);
-  } else {	 
+  if(coap_is_request(coap_pkt)) {
     external_aad_len += cbor_put_bytes(&external_aad_ptr, cose->key_id, cose->key_id_len);
+  } else {
+    if (sending) {
+      external_aad_len += cbor_put_bytes(&external_aad_ptr,
+      coap_pkt->security_context->recipient_context.recipient_id,
+      coap_pkt->security_context->recipient_context.recipient_id_len);
+    } else {
+      external_aad_len += cbor_put_bytes(&external_aad_ptr,
+        coap_pkt->security_context->sender_context.sender_id,
+        coap_pkt->security_context->sender_context.sender_id_len);
+    }
   }
   external_aad_len += cbor_put_bytes(&external_aad_ptr, cose->partial_iv, cose->partial_iv_len);  
   external_aad_len += cbor_put_bytes(&external_aad_ptr, NULL, 0); /* Put integrety protected option, at present there are none. */
- 
+
+  assert(external_aad_len <= sizeof(external_aad_buffer));
+
   uint8_t ret = 0;
-  char* encrypt0 = "Encrypt0";
+  const char* encrypt0 = "Encrypt0";
   /* Begin creating the AAD */
   ret += cbor_put_array(&buffer, 3);
   ret += cbor_put_text(&buffer, encrypt0, strlen(encrypt0));
   ret += cbor_put_bytes(&buffer, NULL, 0);
   ret += cbor_put_bytes(&buffer, external_aad_buffer, external_aad_len);  
 
- 
   return ret;
 }
 /* Creates Nonce */
 void
 oscore_generate_nonce(cose_encrypt0_t *ptr, coap_message_t *coap_pkt, uint8_t *buffer, uint8_t size)
 {
+  printf_hex_detailed("key_id", ptr->key_id, ptr->key_id_len);
+  printf_hex_detailed("partial_iv", ptr->partial_iv, ptr->partial_iv_len);
+  printf_hex_detailed("common_iv", coap_pkt->security_context->common_iv, CONTEXT_INIT_VECT_LEN);
+
   memset(buffer, 0, size);
   buffer[0] = (uint8_t)(ptr->key_id_len);
   memcpy(&(buffer[((size - 5) - ptr->key_id_len)]), ptr->key_id, ptr->key_id_len);
@@ -418,6 +446,8 @@ oscore_generate_nonce(cose_encrypt0_t *ptr, coap_message_t *coap_pkt, uint8_t *b
   for(i = 0; i < size; i++) {
     buffer[i] ^= (uint8_t)coap_pkt->security_context->common_iv[i];
   }
+
+  printf_hex_detailed("result", buffer, size);
 }
 /*Remove all protected options */
 void
@@ -443,12 +473,13 @@ oscore_clear_options(coap_message_t *coap_pkt)
   /* Size1 should be duplicated */
 }
 /*Return 1 if OK, Error code otherwise */
-uint8_t
+bool
 oscore_validate_sender_seq(oscore_recipient_ctx_t *ctx, cose_encrypt0_t *cose)
 {
   int64_t incomming_seq = btou64(cose->partial_iv, cose->partial_iv_len);
-//todo add LOG_DBG here 
-  LOG_DBG_("Incomming SEQ %" PRIi64 "\n", incomming_seq);
+
+  LOG_DBG("Incomming SEQ %" PRIi64 "\n", incomming_seq);
+
   ctx->rollback_largest_seq = ctx->largest_seq;
   ctx->rollback_sliding_window = ctx->sliding_window;
 
@@ -465,7 +496,7 @@ oscore_validate_sender_seq(oscore_recipient_ctx_t *ctx, cose_encrypt0_t *cose)
   */
    if(incomming_seq >= OSCORE_SEQ_MAX) {
     LOG_WARN("OSCORE Replay protection, SEQ larger than SEQ_MAX.\n");
-    return 0;
+    return false;
   }
 
   if(incomming_seq > ctx->largest_seq) {
@@ -476,11 +507,11 @@ oscore_validate_sender_seq(oscore_recipient_ctx_t *ctx, cose_encrypt0_t *cose)
     ctx->largest_seq = incomming_seq;
   } else if(incomming_seq == ctx->largest_seq) {
       LOG_WARN("OSCORE Replay protection, replayed SEQ.\n");
-      return 0;
+      return false;
   } else { /* seq < recipient_seq */
     if(incomming_seq + ctx->replay_window_size < ctx->largest_seq) {
       LOG_WARN("OSCORE Replay protection, SEQ outside of replay window.\n");
-      return 0;
+      return false;
     }
     /* seq+replay_window_size > recipient_seq */
     int shift = ctx->largest_seq - incomming_seq;
@@ -489,29 +520,30 @@ oscore_validate_sender_seq(oscore_recipient_ctx_t *ctx, cose_encrypt0_t *cose)
     verifier = verifier >> shift;
     if(verifier == 1) {
 	      LOG_WARN("OSCORE Replay protection, replayed SEQ.\n");
-      return 0;
+      return false;
     }
     ctx->sliding_window = ctx->sliding_window | pattern;
   }
   ctx->recent_seq = incomming_seq;
-  return 1;
+  return true;
 }
 /* Return 0 if SEQ MAX, return 1 if OK */
-uint8_t
+bool
 oscore_increment_sender_seq(oscore_ctx_t *ctx)
 {
-  ctx->sender_context->seq++;
+  LOG_DBG("Incrementing seq to %"PRIu64"\n", ctx->sender_context.seq + 1);
 
-  if(ctx->sender_context->seq >= OSCORE_SEQ_MAX) {
-    return 0;
-  } else {
-    return 1;
-  }
+  ctx->sender_context.seq++;
+  return ctx->sender_context.seq < OSCORE_SEQ_MAX;
 }
 /* Restore the sequence number and replay-window to the previous state. This is to be used when decryption fail. */
 void
 oscore_roll_back_seq(oscore_recipient_ctx_t *ctx)
 {
+  LOG_DBG("Rolling back seq (window %"PRIu32" = %"PRIi32") (seq %"PRIi64" = %"PRIi64")\n",
+    ctx->sliding_window, ctx->rollback_sliding_window,
+    ctx->largest_seq, ctx->rollback_largest_seq);
+
  // if(ctx->rollback_sliding_window != -1){
     ctx->sliding_window = ctx->rollback_sliding_window;
  //   ctx->rollback_sliding_window = -1;
@@ -522,17 +554,15 @@ oscore_roll_back_seq(oscore_recipient_ctx_t *ctx)
 //    ctx->rollback_largest_seq = -1;
 //  }
 }
-/* Initialize the security_context storage and the protected resource storage. */
+
 void
-oscore_init_server()
+oscore_init(void)
 {
   oscore_ctx_store_init();
+
+  /* Initialize the security_context storage and the protected resource storage. */
   oscore_exchange_store_init();
-}
-/* Initialize the security_context storage, the token - seq association storrage and the URI - security_context association storage. */
-void
-oscore_init_client()
-{
-  oscore_ctx_store_init();
+
+  /* Initialize the security_context storage, the token - seq association storrage and the URI - security_context association storage. */
   oscore_ep_ctx_store_init();
 }

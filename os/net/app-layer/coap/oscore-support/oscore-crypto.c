@@ -36,8 +36,6 @@
  *
  */
 
-
-
 #include "oscore-crypto.h"
 #include "ccm-star.h"
 #include <string.h>
@@ -45,114 +43,166 @@
 
 #include <stdio.h>
 #include "dtls-hmac.h"
+#include "assert.h"
 //#include "dtls.h"
 
-void
-kprintf_hex(unsigned char *data, unsigned int len)
+/* Log configuration */
+#include "sys/log.h"
+#define LOG_MODULE "oscore"
+#ifdef LOG_CONF_LEVEL_OSCORE
+#define LOG_LEVEL LOG_CONF_LEVEL_OSCORE
+#else
+#define LOG_LEVEL LOG_LEVEL_WARN
+#endif
+
+#define OSCORE_ENC_DEC_DEBUG
+
+#ifdef OSCORE_ENC_DEC_DEBUG
+static void
+printf_hex(const char *name, const uint8_t *data, unsigned int len)
 {
-  unsigned int i = 0;
-  for(i = 0; i < len; i++) {
-    printf("%02x ", data[i]);
+  LOG_DBG("%s (len=%u): ", name, len);
+  for(unsigned int i = 0; i < len; i++) {
+    LOG_DBG_("%02x", data[i]);
   }
-  printf("\n");
+  LOG_DBG_("\n");
 }
+#endif
+
 /* Returns 0 if failure to encrypt. Ciphertext length, otherwise.
    Tag-length and ciphertext length is derived from algorithm. No check is done to ensure
    that ciphertext buffer is of the correct length. */
 int
-encrypt(uint8_t alg, uint8_t *key, uint8_t key_len, uint8_t *nonce, uint8_t nonce_len,
-        uint8_t *aad, uint8_t aad_len, uint8_t *buffer, uint16_t plaintext_len)
+encrypt(uint8_t alg,
+        const uint8_t *key, uint8_t key_len,
+        const uint8_t *nonce, uint8_t nonce_len,
+        const uint8_t *aad, uint8_t aad_len,
+        uint8_t *buffer, uint16_t plaintext_len)
 {
-
-  if(alg != COSE_Algorithm_AES_CCM_16_64_128 || key_len !=  COSE_algorithm_AES_CCM_16_64_128_KEY_LEN 
-		  || nonce_len != COSE_algorithm_AES_CCM_16_64_128_IV_LEN) {
-    return -5;
+  if(alg != COSE_Algorithm_AES_CCM_16_64_128) {
+    LOG_ERR("Unsupported algorithm %u\n", alg);
+    return OSCORE_CRYPTO_UNSUPPORTED_ALGORITHM;
   }
 
+  if(key_len != COSE_algorithm_AES_CCM_16_64_128_KEY_LEN) {
+    LOG_ERR("Invalid key length %u != %u\n", key_len, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+    return OSCORE_CRYPTO_INVALID_KEY_LEN;
+  }
+
+  if(nonce_len != COSE_algorithm_AES_CCM_16_64_128_IV_LEN) {
+    LOG_ERR("Invalid nonce length %u != %u\n", nonce_len, COSE_algorithm_AES_CCM_16_64_128_IV_LEN);
+    return OSCORE_CRYPTO_INVALID_NONCE_LEN;
+  }
+
+  uint8_t* tag_buffer = &buffer[plaintext_len];
+
+#ifdef OSCORE_ENC_DEC_DEBUG
+  LOG_DBG("Encrypt:\n");
+  printf_hex("Key", key, key_len);
+  printf_hex("IV", nonce, nonce_len);
+  printf_hex("AAD", aad, aad_len);
+  printf_hex("Plaintext", buffer, plaintext_len);
+  printf_hex("Tag", tag_buffer, COSE_algorithm_AES_CCM_16_64_128_TAG_LEN);
+#endif
+
   CCM_STAR.set_key(key);
-  CCM_STAR.aead(nonce, buffer, plaintext_len, aad, aad_len, &(buffer[plaintext_len]), COSE_algorithm_AES_CCM_16_64_128_TAG_LEN, 1);
-/*
-   printf("Encrypt:\n");
-   printf("Key:\n");
-   kprintf_hex(key, key_len);
-   printf("IV:\n");
-   kprintf_hex(nonce, nonce_len);
-   printf("AAD:\n");
-   kprintf_hex(aad, aad_len);
-   printf("Plaintext:\n");
-   kprintf_hex(plaintext_buffer, plaintext_len);
-   printf("Ciphertext&Tag:\n");
-   kprintf_hex(encryption_buffer, plaintext_len + 8);
- */
+  CCM_STAR.aead(nonce, buffer, plaintext_len, aad, aad_len, tag_buffer, COSE_algorithm_AES_CCM_16_64_128_TAG_LEN, 1);
+
+#ifdef OSCORE_ENC_DEC_DEBUG
+  printf_hex("Tag'", tag_buffer, COSE_algorithm_AES_CCM_16_64_128_TAG_LEN);
+  printf_hex("Ciphertext", buffer, plaintext_len);
+#endif
+
   return plaintext_len + COSE_algorithm_AES_CCM_16_64_128_TAG_LEN;
 }
+
 /* Return 0 if if decryption failure. Plaintext length otherwise.
    Tag-length and plaintext length is derived from algorithm. No check is done to ensure
    that plaintext buffer is of the correct length. */
 int
-decrypt(uint8_t alg, uint8_t *key, uint8_t key_len, uint8_t *nonce, uint8_t nonce_len,
-        uint8_t *aad, uint8_t aad_len, uint8_t *buffer, uint16_t ciphertext_len)
+decrypt(uint8_t alg,
+        const uint8_t *key, uint8_t key_len,
+        const uint8_t *nonce, uint8_t nonce_len,
+        const uint8_t *aad, uint8_t aad_len,
+        uint8_t *buffer, uint16_t ciphertext_len)
 {
+  if(alg != COSE_Algorithm_AES_CCM_16_64_128) {
+    LOG_ERR("Unsupported algorithm %u\n", alg);
+    return OSCORE_CRYPTO_UNSUPPORTED_ALGORITHM;
+  }
 
-  if(alg != COSE_Algorithm_AES_CCM_16_64_128 || key_len != COSE_algorithm_AES_CCM_16_64_128_KEY_LEN
-		|| nonce_len != COSE_algorithm_AES_CCM_16_64_128_IV_LEN) {
-    return -5;
+  if(key_len != COSE_algorithm_AES_CCM_16_64_128_KEY_LEN) {
+    LOG_ERR("Invalid key length %u != %u\n", key_len, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
+    return OSCORE_CRYPTO_INVALID_KEY_LEN;
+  }
+
+  if(nonce_len != COSE_algorithm_AES_CCM_16_64_128_IV_LEN) {
+    LOG_ERR("Invalid nonce length %u != %u\n", nonce_len, COSE_algorithm_AES_CCM_16_64_128_IV_LEN);
+    return OSCORE_CRYPTO_INVALID_NONCE_LEN;
   }
 
   uint8_t tag_buffer[COSE_algorithm_AES_CCM_16_64_128_TAG_LEN];
   
-  CCM_STAR.set_key(key);
-/*    printf("Decrypt:\n");
-     printf("Key:\n");
-     kprintf_hex(key, key_len);
-     printf("IV:\n");
-     kprintf_hex(nonce, nonce_len);
-     printf("AAD:\n");
-     kprintf_hex(aad, aad_len);
-     printf("Ciphertext&Tag:\n");
-     kprintf_hex(decryption_buffer, ciphertext_len);
- */
   uint16_t plaintext_len = ciphertext_len - COSE_algorithm_AES_CCM_16_64_128_TAG_LEN;
+
+#ifdef OSCORE_ENC_DEC_DEBUG
+  LOG_DBG("Decrypt:\n");
+  printf_hex("Key", key, key_len);
+  printf_hex("IV", nonce, nonce_len);
+  printf_hex("AAD", aad, aad_len);
+  printf_hex("Ciphertext", buffer, plaintext_len);
+  printf_hex("Tag", &buffer[plaintext_len], COSE_algorithm_AES_CCM_16_64_128_TAG_LEN);
+#endif
+
+  CCM_STAR.set_key(key);
   CCM_STAR.aead(nonce, buffer, plaintext_len, aad, aad_len, tag_buffer, COSE_algorithm_AES_CCM_16_64_128_TAG_LEN, 0);
 
-  if(memcmp(tag_buffer, &(buffer[plaintext_len]), COSE_algorithm_AES_CCM_16_64_128_TAG_LEN) != 0) {
-      	  return 0; /* Decryption failure */
+#ifdef OSCORE_ENC_DEC_DEBUG
+  printf_hex("Tag'", tag_buffer, COSE_algorithm_AES_CCM_16_64_128_TAG_LEN);
+  printf_hex("Plaintext", buffer, plaintext_len);
+#endif
+
+  if(memcmp(tag_buffer, &buffer[plaintext_len], COSE_algorithm_AES_CCM_16_64_128_TAG_LEN) != 0) {
+    return OSCORE_CRYPTO_DECRYPTION_FAILURE; /* Decryption/Authentication failure */
   }
   
   return plaintext_len;
 }
+
 /* only works with key_len <= 64 bytes */
 void
 hmac_sha256(const uint8_t *key, uint8_t key_len, const uint8_t *data, uint8_t data_len, uint8_t *hmac)
 {
+  assert(key_len <= 64);
+
   dtls_hmac_context_t ctx;
   dtls_hmac_init(&ctx, key, key_len);
   dtls_hmac_update(&ctx, data, data_len);
   dtls_hmac_finalize(&ctx, hmac);
-
 }
 
-int
-hkdf_extract( const uint8_t *salt, uint8_t salt_len, const uint8_t *ikm, uint8_t ikm_len, uint8_t *prk_buffer)
+static void
+hkdf_extract(const uint8_t *salt, uint8_t salt_len, const uint8_t *ikm, uint8_t ikm_len, uint8_t *prk_buffer)
 {
-  uint8_t zeroes[32];
-  memset(zeroes, 0, 32);
-  
+  uint8_t zeroes[DTLS_SHA256_DIGEST_LENGTH];
+  memset(zeroes, 0, sizeof(zeroes));
+
   if(salt == NULL || salt_len == 0){
-    hmac_sha256(zeroes, 32, ikm, ikm_len, prk_buffer);
-  } else { 
-    hmac_sha256(salt, salt_len, ikm, ikm_len, prk_buffer);
+    salt = zeroes;
+    salt_len = sizeof(zeroes);
   }
-  return 0;
+  
+  hmac_sha256(salt, salt_len, ikm, ikm_len, prk_buffer);
 }
-int
-hkdf_expand( const uint8_t *prk, const uint8_t *info, uint8_t info_len, uint8_t *okm, uint8_t okm_len)
+
+static int
+hkdf_expand(const uint8_t *prk, const uint8_t *info, uint8_t info_len, uint8_t *okm, uint8_t okm_len)
 {
-  if( info_len > HKDF_INFO_MAXLEN) {
-	  return -1;
+  if(info_len > HKDF_INFO_MAXLEN) {
+    return OSCORE_CRYPTO_HKDF_INVALID_INFO_LEN;
   }
-  if( okm_len > HKDF_OUTPUT_MAXLEN) {
-	  return -2;
+  if(okm_len > HKDF_OUTPUT_MAXLEN) {
+    return OSCORE_CRYPTO_HKDF_INVALID_OKM_LEN;
   }
   int N = (okm_len + 32 - 1) / 32; /* ceil(okm_len/32) */
   uint8_t aggregate_buffer[32 + HKDF_INFO_MAXLEN + 1];
@@ -173,15 +223,18 @@ hkdf_expand( const uint8_t *prk, const uint8_t *info, uint8_t info_len, uint8_t 
   }
 
   memcpy(okm, out_buffer, okm_len);
+
   return 0;
 }
 
 int
-hkdf(const uint8_t *salt, uint8_t salt_len, const uint8_t *ikm, uint8_t ikm_len, uint8_t *info, uint8_t info_len, uint8_t *okm, uint8_t okm_len)
+hkdf(
+  const uint8_t *salt, uint8_t salt_len,
+  const uint8_t *ikm, uint8_t ikm_len,
+  uint8_t *info, uint8_t info_len,
+  uint8_t *okm, uint8_t okm_len)
 {
-
-  uint8_t prk_buffer[32];
+  uint8_t prk_buffer[DTLS_SHA256_DIGEST_LENGTH];
   hkdf_extract(salt, salt_len, ikm, ikm_len, prk_buffer);
-  hkdf_expand(prk_buffer, info, info_len, okm, okm_len);
-  return 0;
+  return hkdf_expand(prk_buffer, info, info_len, okm, okm_len);
 }

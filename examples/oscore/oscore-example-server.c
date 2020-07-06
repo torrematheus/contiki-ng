@@ -111,19 +111,10 @@ PROCESS_THREAD(er_example_server, ev, data)
   printf("PAN ID: 0x%04X\n", IEEE802154_PANID);
 #endif
 
-  /* Initialize the REST engine. */
-  coap_engine_init();
-
   #ifdef WITH_OSCORE
-  /* Initiate the OSCORE server, this includes storage for OSCORE-Security-Contexts. */
-  oscore_init_server();
-
   /*Derive an OSCORE-Security-Context. */
-  static oscore_ctx_t *context;
-  context = oscore_derive_ctx(master_secret, 35, NULL, 0, 10, sender_id, 6, receiver_id, 6, NULL, 0, OSCORE_DEFAULT_REPLAY_WINDOW);
-  if(!context){
-	printf("Could not create OSCORE Security Context!\n");
-  }
+  static oscore_ctx_t context;
+  oscore_derive_ctx(&context, master_secret, 35, NULL, 0, 10, sender_id, 6, receiver_id, 6, NULL, 0, OSCORE_DEFAULT_REPLAY_WINDOW);
 
   uint8_t key_id[] = { 0x63, 0x6C, 0x69, 0x65, 0x6E, 0x74 };
   oscore_ctx_t *ctx;

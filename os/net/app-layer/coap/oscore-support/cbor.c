@@ -36,20 +36,16 @@
  *
  */
 
-
 #include "cbor.h"
 #include <string.h>
 
-#define DEBUG 0
-#if DEBUG
-#include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
-#define PRINTF_HEX(data, len)   oscoap_printf_hex(data, len)
+#include "sys/log.h"
+#define LOG_MODULE "oscore"
+#ifdef LOG_CONF_LEVEL_OSCORE
+#define LOG_LEVEL LOG_CONF_LEVEL_OSCORE
 #else
-#define PRINTF(...)
-#define PRINTF_HEX(data, len)
+#define LOG_LEVEL LOG_LEVEL_WARN
 #endif
-
 
 int cbor_put_nil(uint8_t **buffer){
 	**buffer = 0xF6;
@@ -57,7 +53,7 @@ int cbor_put_nil(uint8_t **buffer){
 	return 1;
 }
 int
-cbor_put_text(uint8_t **buffer, char *text, uint8_t text_len)
+cbor_put_text(uint8_t **buffer, const char *text, uint8_t text_len)
 {
   uint8_t ret = 0;
 
@@ -83,7 +79,7 @@ cbor_put_array(uint8_t **buffer, uint8_t elements)
 {
   if(elements > 15) {
     /*	#warning "handle this case!\n" */
-    PRINTF("ERROR! in put array\n");
+    LOG_ERR("ERROR! in put array\n");
     return 0;
   }
 
@@ -92,7 +88,7 @@ cbor_put_array(uint8_t **buffer, uint8_t elements)
   return 1;
 }
 int
-cbor_put_bytes(uint8_t **buffer, uint8_t *bytes, uint8_t bytes_len)
+cbor_put_bytes(uint8_t **buffer, const uint8_t *bytes, uint8_t bytes_len)
 {
   uint8_t ret = 0;
   if(bytes_len > 23) {
@@ -116,7 +112,7 @@ cbor_put_map(uint8_t **buffer, uint8_t elements)
 {
   if(elements > 15) {
     /*	#warning "handle this case!\n" */
-    PRINTF("ERROR in put map\n");
+    LOG_ERR("ERROR in put map\n");
     return 0;
   }
   **buffer = (0xa0 | elements);

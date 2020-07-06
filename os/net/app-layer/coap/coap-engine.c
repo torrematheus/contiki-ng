@@ -142,6 +142,15 @@ call_service(coap_message_t *request, coap_message_t *response,
 /* the discover resource is automatically included for CoAP */
 extern coap_resource_t res_well_known_core;
 
+#ifdef WITH_OSCORE
+static void oscore_missing_security_context_default(const coap_endpoint_t *src)
+{
+}
+
+extern void oscore_missing_security_context(const coap_endpoint_t *src)
+  __attribute__ ((weak, alias ("oscore_missing_security_context_default")));
+#endif
+
 /*---------------------------------------------------------------------------*/
 /*- Internal API ------------------------------------------------------------*/
 /*---------------------------------------------------------------------------*/
@@ -192,15 +201,16 @@ coap_receive(const coap_endpoint_t *src,
                             coap_get_mid());
           /* mirror token */
         }
-        #ifdef WITH_OSCORE 
-	if(coap_is_option(message, COAP_OPTION_OSCORE)){
-	  coap_set_oscore(response);
-	  if(message->security_context == NULL){
-		  printf("context is NULL\n");
-	  }
+
+#ifdef WITH_OSCORE 
+        if(coap_is_option(message, COAP_OPTION_OSCORE)){
+          coap_set_oscore(response);
+          if(message->security_context == NULL){
+            LOG_WARN("OSCORE security context is NULL in coap_receive\n");
+          }
           response->security_context = message->security_context;
         }
-        #endif /* WITH_OSCORE */
+#endif /* WITH_OSCORE */
         if(message->token_len) {
           coap_set_token(response, message->token, message->token_len);
           /* get offset for blockwise transfers */
@@ -357,22 +367,35 @@ coap_receive(const coap_endpoint_t *src,
     coap_clear_transaction(transaction);
   } else if(coap_status_code == OSCORE_DECRYPTION_ERROR) {
     LOG_WARN("OSCORE response decryption failed!\n");
-    coap_transaction_t *t = coap_get_transaction_by_mid(message->mid);
-    
-    /* free transaction memory before callback, as it may create a new transaction */
-    coap_resource_response_handler_t callback = t->callback;
-    void *callback_data = t->callback_data;
-    
-    message->code = OSCORE_DECRYPTION_ERROR;
-    coap_clear_transaction(t);
-    printf("TODO send empty ACK!\n");
-    /* check if someone registered for the response */
-    if(callback) {
-      callback(callback_data, message);
+    if ((transaction = coap_get_transaction_by_mid(message->mid))) {
+      /* free transaction memory before callback, as it may create a new transaction */
+      coap_resource_response_handler_t callback = transaction->callback;
+      void *callback_data = transaction->callback_data;
+      
+      message->code = OSCORE_DECRYPTION_ERROR;
+      coap_clear_transaction(transaction);
+      printf("TODO send empty ACK!\n");
+      /* check if someone registered for the response */
+      if(callback) {
+        callback(callback_data, message);
+      }
     }
-    
-    return coap_status_code;
   } else {
+#ifdef WITH_OSCORE
+    if (coap_status_code == OSCORE_MISSING_CONTEXT) {
+      LOG_WARN("OSCORE cannot decrypt, missing context!\n");
+
+      /* Need to inform receivers of failed decryption */
+      oscore_missing_security_context(src);
+
+      coap_status_code = UNAUTHORIZED_4_01;
+
+      // TODO: this return needs to be removed so that a
+      // UNAUTHORIZED_4_01 is sent if a context is unavailable.
+      return coap_status_code;
+    }
+#endif /* WITH_OSCORE */
+
     coap_message_type_t reply_type = COAP_TYPE_ACK;
 
     LOG_WARN("ERROR %u: %s\n", coap_status_code, coap_error_message);
@@ -390,15 +413,15 @@ coap_receive(const coap_endpoint_t *src,
     uint8_t tmp_token[8];
     uint8_t token_len = 0;
     if(message->token_len) {
-          token_len = message->token_len;
-          memcpy(tmp_token, message->token, token_len);
+      token_len = message->token_len;
+      memcpy(tmp_token, message->token, token_len);
     }
 #endif /* WITH_OSCORE */
     coap_init_message(message, reply_type, coap_status_code,
                       message->mid);
 #ifdef WITH_OSCORE
-    if( token_len){
-        coap_set_token(message, tmp_token, token_len);
+    if(token_len){
+      coap_set_token(message, tmp_token, token_len);
     }
 #endif /* WITH_OSCORE */
     coap_set_payload(message, coap_error_message,
@@ -428,6 +451,10 @@ coap_engine_init(void)
 
   coap_transport_init();
   coap_init_connection();
+
+#ifdef WITH_OSCORE
+  oscore_init();
+#endif
 }
 /*---------------------------------------------------------------------------*/
 /**

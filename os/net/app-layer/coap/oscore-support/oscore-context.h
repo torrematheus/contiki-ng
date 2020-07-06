@@ -51,16 +51,12 @@
 
 #define OSCORE_SEQ_MAX (((uint64_t)1 << 40) - 1)
 
-#ifndef CONTEXT_NUM
-#define CONTEXT_NUM 2
-#endif
-
 #ifndef TOKEN_SEQ_NUM
-#define TOKEN_SEQ_NUM 2
+#define TOKEN_SEQ_NUM 10
 #endif
 
 #ifndef EP_CTX_NUM
-#define EP_CTX_NUM 2
+#define EP_CTX_NUM 10
 #endif
 
 typedef struct oscore_sender_ctx_t oscore_sender_ctx_t;
@@ -73,7 +69,7 @@ struct oscore_sender_ctx_t {
   uint8_t sender_key[CONTEXT_KEY_LEN];
   uint8_t token[COAP_TOKEN_LEN];
   uint64_t seq;
-  uint8_t *sender_id;
+  const uint8_t *sender_id;
   uint8_t sender_id_len;
   uint8_t token_len;
 };
@@ -84,9 +80,9 @@ struct oscore_recipient_ctx_t {
   uint64_t recent_seq;
   uint32_t sliding_window;
   int32_t rollback_sliding_window;
-  oscore_recipient_ctx_t *recipient_context; /* This field facilitates easy integration of OSCOAP multicast */
+  //oscore_recipient_ctx_t *recipient_context; /* This field facilitates easy integration of OSCOAP multicast */
   uint8_t recipient_key[CONTEXT_KEY_LEN];
-  uint8_t *recipient_id;
+  const uint8_t *recipient_id;
   uint8_t recipient_id_len;
   uint8_t replay_window_size;
   uint8_t initialized;
@@ -94,12 +90,12 @@ struct oscore_recipient_ctx_t {
 
 struct oscore_ctx_t {
   oscore_ctx_t *next;
-  uint8_t *master_secret;
-  uint8_t *master_salt;
+  const uint8_t *master_secret;
+  const uint8_t *master_salt;
   uint8_t common_iv[CONTEXT_INIT_VECT_LEN];
-  uint8_t *id_context;
-  oscore_sender_ctx_t *sender_context;
-  oscore_recipient_ctx_t *recipient_context;
+  const uint8_t *id_context;
+  oscore_sender_ctx_t sender_context;
+  oscore_recipient_ctx_t recipient_context;
   uint8_t master_secret_len;
   uint8_t master_salt_len;
   uint8_t id_context_len;
@@ -117,27 +113,34 @@ struct oscore_exchange_t {
 struct ep_ctx_t {
   ep_ctx_t *next;
   coap_endpoint_t *ep;
-  char *uri;
+  const char *uri;
   oscore_ctx_t *ctx;
 };
 void oscore_ctx_store_init();
 
 //replay window default is 32
-oscore_ctx_t *oscore_derive_ctx(uint8_t *master_secret, uint8_t master_secret_len, uint8_t *master_salt, uint8_t master_salt_len, uint8_t alg, uint8_t *sid, uint8_t sid_len, uint8_t *rid, uint8_t rid_len, uint8_t *id_context, uint8_t id_context_len, uint8_t replay_window);
+void oscore_derive_ctx(oscore_ctx_t *common_ctx,
+  const uint8_t *master_secret, uint8_t master_secret_len,
+  const uint8_t *master_salt, uint8_t master_salt_len,
+  uint8_t alg,
+  const uint8_t *sid, uint8_t sid_len,
+  const uint8_t *rid, uint8_t rid_len,
+  const uint8_t *id_context, uint8_t id_context_len,
+  uint8_t replay_window);
 
-int oscore_free_ctx(oscore_ctx_t *ctx);
+void oscore_free_ctx(oscore_ctx_t *ctx);
 
-oscore_ctx_t *oscore_find_ctx_by_rid(uint8_t *rid, uint8_t rid_len);
+oscore_ctx_t *oscore_find_ctx_by_rid(const uint8_t *rid, uint8_t rid_len);
 
 /* Token <=> SEQ association */
-void oscore_exchange_store_init();
-uint8_t oscore_set_exchange(uint8_t *token, uint8_t token_len, uint64_t seq, oscore_ctx_t *context);
-oscore_ctx_t* oscore_get_exchange(uint8_t *token, uint8_t token_len, uint64_t *seq);
-void oscore_remove_exchange(uint8_t *token, uint8_t token_len);
+void oscore_exchange_store_init(void);
+bool oscore_set_exchange(const uint8_t *token, uint8_t token_len, uint64_t seq, oscore_ctx_t *context);
+oscore_ctx_t* oscore_get_contex_from_exchange(const uint8_t *token, uint8_t token_len, uint64_t *seq);
+void oscore_remove_exchange(const uint8_t *token, uint8_t token_len);
 
 /* URI <=> CTX association */
-void oscore_ep_ctx_store_init();
-uint8_t oscore_ep_ctx_set_association(coap_endpoint_t *ep, char *uri, oscore_ctx_t *ctx);
+void oscore_ep_ctx_store_init(void);
+bool oscore_ep_ctx_set_association(coap_endpoint_t *ep, const char *uri, oscore_ctx_t *ctx);
 oscore_ctx_t *oscore_get_context_from_ep(coap_endpoint_t *ep, const char *uri);
 void oscore_remove_ep_ctx(coap_endpoint_t *ep, const char *uri);
 #endif /* _OSCORE_CONTEXT_H */
