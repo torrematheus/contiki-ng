@@ -39,6 +39,7 @@
 #ifndef _CRYPTO_H
 #define _CRYPTO_H
 #include <inttypes.h>
+#include <stdbool.h>
 
 #include "coap.h"
 
@@ -54,6 +55,38 @@
 #define AEAD_PLAINTEXT_MAXLEN COAP_MAX_CHUNK_SIZE
 /* Enough for all COSE-AES-CCM algorithms. */
 #define AEAD_TAG_MAXLEN 16  
+
+#ifdef CONTIKI_TARGET_NATIVE
+#include "uECC.h"
+#else /*NON-NATIVE need watchdog*/
+#include "dev/watchdog.h"
+#endif /*CONTIKI_TARGET_NATIVE */
+
+#ifdef CONTIKI_TARGET_ZOUL
+#include "dev/ecc-algorithm.h"
+#include "dev/ecc-curve.h"
+#include "dev/sha256.h"
+#include "sys/pt.h"
+#else
+#ifdef CONTIKI_TARGET_SIMPLELINK
+//#include "driverlib/rom_crypto.h"
+#include "ti/drivers/ECDSA.h"
+#include "ti/drivers/cryptoutils/cryptokey/CryptoKeyPlaintext.h"
+#include "dev/watchdog.h"
+#endif
+#endif /* CONTIKI_TARGET_ZOUL */
+
+#ifndef SHA256_DIGEST_LEN_BYTES
+#define SHA256_DIGEST_LEN_BYTES (256/8)
+#endif
+
+#ifndef MSGS_TO_SIGN_SIZE
+#define MSGS_TO_SIGN_SIZE 5
+#endif
+
+#ifndef MSGS_TO_VERIFY_SIZE
+#define MSGS_TO_VERIFY_SIZE 5
+#endif
 
 /* Returns 0 if failure to encrypt. Ciphertext length, otherwise. Tag-length and ciphertext length is derived from algorithm. No check is done to ensure that ciphertext buffer is of the correct length. */
 int encrypt(uint8_t alg, uint8_t *key, uint8_t key_len, uint8_t *nonce, uint8_t nonce_len, uint8_t *aad, uint8_t aad_len, uint8_t *buffer, uint16_t plaintext_len);
@@ -77,7 +110,59 @@ oscore_edDSA_sign(int8_t alg, int8_t alg_param, uint8_t *signature, uint8_t *cip
 int
 oscore_edDSA_verify(int8_t alg, int8_t alg_param, uint8_t *signature, uint8_t *plaintext, uint16_t plaintext_len, uint8_t *public_key);
 
+/*Code inspired by Matthew*/
+void oscore_crypto_init(void);
 
+bool crypto_fill_random(uint8_t *buffer, size_t size_in_bytes);
+//queue items and functions are moved to coap.h
+
+//HW crypto
+typedef struct messages_to_verify_entry
+{
+	struct messages_to_verify_entry * next;
+
+	struct process *process;
+
+	const uint8_t *message;
+	uint16_t message_len;
+
+	uint8_t result;
+	//public key type changed (uint8_t in our case?)
+	const uint8_t *public_key; //FIXME	
+
+	void *data;
+
+} messages_to_verify_entry_t;
+
+bool queue_message_to_verify(struct process *process, void *data, uint8_t *message, uint16_t message_len, const uint8_t *public_key);
+void queue_message_to_verify_done(messages_to_verify_entry_t *item);
+
+typedef struct messages_to_sign_entry
+{
+	struct messages_to_sign_entry *next;
+
+	//the process to notify the end of sign
+	struct process *process;
+
+	uint8_t *message;
+	uint16_t message_buffer_len;
+	uint16_t message_len;
+
+	//secret keys
+	uint8_t *private_key;
+	uint8_t *public_key;
+
+	//signing result
+	uint8_t result;
+
+} messages_to_sign_entry_t;
+
+bool queue_message_to_sign(struct process *process, uint8_t *private_key, uint8_t *public_key, uint8_t *message, uint16_t message_buffer_len, uint16_t message_len);
+void queue_message_to_sign_done(messages_to_sign_entry_t *item);
+//messages_to_verify stuff moved to coap.h to fix circular includes
+
+extern process_event_t pe_message_signed;
+extern process_event_t pe_message_verified;
 
 
 #endif /* _CRYPTO_H */
