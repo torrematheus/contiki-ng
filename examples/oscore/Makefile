@@ -6,6 +6,10 @@ CONTIKI=../..
 MAKE_WITH_OSCORE = 1
 WERROR = 1
 CFLAGS += -DCOOJA_MTARCH_STACKSIZE=4096
+TARGET = simplelink
+BOARD = launchpad/cc1352r1
+CFLAGS += -g
+MODULES += os/services/shell
 #CFLAGS += -Wvla
 
 # build RESTful resources
@@ -21,6 +25,7 @@ CONTIKI_TARGET_SOURCEFILES += plugtest_resources.c
 
 # Include the CoAP implementation
 MODULES += os/net/app-layer/coap
+
 
 include $(CONTIKI)/Makefile.include
 

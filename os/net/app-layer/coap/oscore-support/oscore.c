@@ -68,7 +68,7 @@ printf_hex(const uint8_t *data, size_t len)
 static void
 printf_hex_detailed(const char* name, const uint8_t *data, size_t len)
 {
-  LOG_DBG("%s (len=%u): ", name, len);
+  //LOG_DBG("%s (len=%u): ", name, len);
   for(size_t i = 0; i < len; i++) {
     LOG_DBG_("%02x", data[i]);
   }
